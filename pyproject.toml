@@ -1,0 +1,38 @@
+[project]
+name = "ror-set-point-matching"
+version = "1.0.0"
+description = "Match affiliation strings to ROR records with a learned retriever and a set model"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch==2.6.0",
+    "transformers==4.57.6",
+    "sentence-transformers==5.1.2",
+    "safetensors",
+    "huggingface_hub>=0.30",
+    "sentencepiece",
+    "protobuf",
+    "numpy",
+]
+
+[project.optional-dependencies]
+# Packed set-model batches with flash-attention 2 on a CUDA GPU: the prebuilt wheel for torch 2.6, CUDA 12,
+# Python 3.12 on Linux x86_64. Install with uv sync --extra gpu. (The cxx11abiFALSE wheels of flash-attn 2.8 need
+# the C++11 ABI, which the torch 2.6 wheels on PyPI do not have.)
+gpu = ["flash-attn ; sys_platform == 'linux' and platform_machine == 'x86_64' and python_version == '3.12'"]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv.sources]
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.6cxx11abiFALSE-cp312-cp312-linux_x86_64.whl" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ror_set_point"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
