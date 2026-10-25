@@ -91,34 +91,43 @@ The design of this matcher is different in these ways:
 
 ## Results
 
-The table gives exact match, precision and recall, in percent, on the test splits of the dataset. Exact match is the share of strings where the answer is exactly the set of records that the string names. Precision and recall are micro averages over ROR IDs. The scores come from `ror_set_point.evaluation.score`.
+The table gives exact match, precision and recall, in percent, on the test splits of the dataset. Exact match is the share of strings where the answer is exactly the set of records that the string names. Precision and recall are micro averages over ROR IDs. The scores come from `ror_set_point.evaluation.score`. The `affiliations_crossref`, `affiliations_openalex` and `affiliations_openalex_non_latin` configs hold the rows of `affiliations` from one source each. Thus their test splits are parts of `affiliations` test.
 
 The table compares these systems:
 
 - "v3.0.0, local" is openalex-affiliation-matcher v3.0.0 as anyone can run it: lexical and dense candidates, the pair scorer and the chooser. It does not have the two generators that need OpenAlex services, or the teacher. Its own benchmark figures are higher, because they come from the production answers and use other labels. It trained on some strings of `affiliations_unseen_institutions`, so its row there is not a measure of new institutions.
 - "Baseline" uses the design of v3.0.0: the same candidate generators, a pair scorer and a chooser ([ror-set-point-pair-scorer-baseline](https://huggingface.co/adambuttrick/ror-set-point-pair-scorer-baseline)). Its pair scorer starts from the pair scorer of v3.0.0 and also trains on teacher pairs. On `affiliations_unseen_institutions`, the baseline trained on the train split of that config. On the other splits, it trained on the labeled strings of all institutions.
-- "This matcher" is ROR set point matching with the released retriever and set model. Its answers come from `match run`.
+- "ror-set-point" is ROR set point matching with the released retriever and set model. Its answers come from `match run`.
 
 | Test split | Strings | System | Exact match | Precision | Recall |
 |---|---:|---|---:|---:|---:|
 | `affiliations` | 1,947 | v3.0.0, local | 78.4 | 94.3 | 79.0 |
 |  |  | Baseline | 86.1 | 96.1 | 88.1 |
-|  |  | This matcher | 90.0 | 95.7 | 92.6 |
+|  |  | ror-set-point | 90.0 | 95.7 | 92.6 |
+| `affiliations_crossref` | 447 | v3.0.0, local | 85.9 | 96.7 | 88.6 |
+|  |  | Baseline | 91.7 | 97.9 | 93.9 |
+|  |  | ror-set-point | 92.8 | 97.3 | 95.5 |
+| `affiliations_openalex` | 751 | v3.0.0, local | 79.6 | 94.9 | 81.7 |
+|  |  | Baseline | 87.5 | 96.4 | 90.3 |
+|  |  | ror-set-point | 90.0 | 96.0 | 93.0 |
+| `affiliations_openalex_non_latin` | 749 | v3.0.0, local | 72.6 | 91.0 | 68.3 |
+|  |  | Baseline | 81.4 | 94.0 | 80.8 |
+|  |  | ror-set-point | 88.4 | 94.1 | 89.6 |
 | `affiliations_unseen_institutions` | 1,957 | v3.0.0, local | 77.0 | 95.9 | 80.0 |
 |  |  | Baseline | 79.2 | 93.6 | 85.1 |
-|  |  | This matcher | 83.6 | 94.6 | 86.9 |
+|  |  | ror-set-point | 83.6 | 94.6 | 86.9 |
 | `datacite` | 3,000 | v3.0.0, local | 92.4 | 97.7 | 93.2 |
 |  |  | Baseline | 91.9 | 95.1 | 95.6 |
-|  |  | This matcher | 93.5 | 98.0 | 94.5 |
+|  |  | ror-set-point | 93.5 | 98.0 | 94.5 |
 | `openalex_sample`, sample v1 | 20,000 | v3.0.0, local | 81.6 | 95.3 | 83.2 |
 |  |  | Baseline | 86.9 | 95.6 | 90.0 |
-|  |  | This matcher | 89.9 | 96.1 | 92.1 |
+|  |  | ror-set-point | 89.9 | 96.1 | 92.1 |
 | `openalex_sample`, sample v2 | 20,000 | v3.0.0, local | 82.6 | 94.9 | 84.2 |
 |  |  | Baseline | 88.0 | 95.2 | 91.5 |
-|  |  | This matcher | 90.4 | 95.7 | 93.3 |
+|  |  | ror-set-point | 90.4 | 95.7 | 93.3 |
 
-- On the 1,755 links of `affiliations_unseen_institutions` test to held-out institutions, recall is 89.6 for this matcher and 86.3 for the baseline. On the validation split, recall is 78.7 and 84.9. The cause is CNRS: this matcher often misses it when a string names it only with its acronym. Without the CNRS strings, recall is 86.5 and 83.5. No training row of the released models has a held-out institution as a positive.
-- On `affiliations` test, this matcher is right on 150 strings where the baseline is wrong. It is wrong on 74 strings where the baseline is right (exact McNemar p = 4 × 10⁻⁷). On `affiliations_unseen_institutions` test, the counts are 170 and 82 (p = 3 × 10⁻⁸).
+- On the 1,755 links of `affiliations_unseen_institutions` test to held-out institutions, recall is 89.6 for ror-set-point and 86.3 for the baseline. On the validation split, recall is 78.7 and 84.9. The cause is CNRS: ror-set-point often misses it when a string names it only with its acronym. Without the CNRS strings, recall is 86.5 and 83.5. No training row of the released models has a held-out institution as a positive.
+- On `affiliations` test, ror-set-point is right on 150 strings where the baseline is wrong. It is wrong on 74 strings where the baseline is right (exact McNemar p = 4 × 10⁻⁷). On `affiliations_unseen_institutions` test, the counts are 170 and 82 (p = 3 × 10⁻⁸).
 - No model, setting or training-data rule comes from the scores on a test split. The `affiliations_unseen_institutions` test split is a pass-or-fail check for the retriever and for the set model. `openalex_sample` test and `datacite` also have scores for information only, in addition to the final scores.
 
 [docs/evaluation.md](docs/evaluation.md) gives more results and the procedure.

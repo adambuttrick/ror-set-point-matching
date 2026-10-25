@@ -103,7 +103,7 @@ Use the error classes on validation splits only.
 
 ## Results
 
-The tables give exact match, precision and recall in percent. The answers of this matcher on the test splits come from `match run`, on one NVIDIA H200. The model repositories hold these answers (see [Reproduce the results](#reproduce-the-results)).
+The tables give exact match, precision and recall in percent. The answers of ror-set-point on the test splits come from `match run`, on one NVIDIA H200. The model repositories hold these answers (see [Reproduce the results](#reproduce-the-results)).
 
 The systems are:
 
@@ -112,7 +112,7 @@ The systems are:
 | v3.0.0, local | openalex-affiliation-matcher v3.0.0 with the parts anyone can run: lexical and dense candidates, the pair scorer and the chooser. It trained on some strings and institutions of `affiliations_unseen_institutions` |
 | Baseline, unseen split | The design of v3.0.0, retrained on the train split of `affiliations_unseen_institutions` ([ror-set-point-pair-scorer-baseline](https://huggingface.co/adambuttrick/ror-set-point-pair-scorer-baseline)). Its pair scorer starts from the pair scorer of v3.0.0 and also trains on teacher pairs |
 | Baseline, all | The same design, retrained on `affiliations` train and `openalex_sample` train (all institutions) |
-| This matcher | The released retriever and set model. No training row of these models has a held-out institution of `affiliations_unseen_institutions` as a positive ([phase 1](training-1-data.md#strings-that-training-does-not-use)) |
+| ror-set-point | The released retriever and set model. No training row of these models has a held-out institution of `affiliations_unseen_institutions` as a positive ([phase 1](training-1-data.md#strings-that-training-does-not-use)) |
 | Set-model variants | The set models on bge-reranker-v2-m3 and on EmbeddingGemma, with the candidate lists in revision `ae056b6` of the released set model's repository. Their training rows contain synthetic strings that name held-out institutions |
 
 The repository of the baseline holds the answers of v3.0.0 and of "Baseline, all" (`comparison/`).
@@ -123,35 +123,35 @@ The repository of the baseline holds the answers of v3.0.0 and of "Baseline, all
 |---|---:|---|---:|---:|---:|
 | `affiliations` (baseline, all) | 1,947 | v3.0.0, local | 78.4 | 94.3 | 79.0 |
 |  |  | Baseline | 86.1 | 96.1 | 88.1 |
-|  |  | This matcher | 90.0 | 95.7 | 92.6 |
+|  |  | ror-set-point | 90.0 | 95.7 | 92.6 |
 | `affiliations_crossref` | 447 | v3.0.0, local | 85.9 | 96.7 | 88.6 |
 |  |  | Baseline | 91.7 | 97.9 | 93.9 |
-|  |  | This matcher | 92.8 | 97.3 | 95.5 |
+|  |  | ror-set-point | 92.8 | 97.3 | 95.5 |
 | `affiliations_openalex` | 751 | v3.0.0, local | 79.6 | 94.9 | 81.7 |
 |  |  | Baseline | 87.5 | 96.4 | 90.3 |
-|  |  | This matcher | 90.0 | 96.0 | 93.0 |
+|  |  | ror-set-point | 90.0 | 96.0 | 93.0 |
 | `affiliations_openalex_non_latin` | 749 | v3.0.0, local | 72.6 | 91.0 | 68.3 |
 |  |  | Baseline | 81.4 | 94.0 | 80.8 |
-|  |  | This matcher | 88.4 | 94.1 | 89.6 |
+|  |  | ror-set-point | 88.4 | 94.1 | 89.6 |
 | `affiliations_unseen_institutions` (baseline, unseen split) | 1,957 | v3.0.0, local | 77.0 | 95.9 | 80.0 |
 |  |  | Baseline | 79.2 | 93.6 | 85.1 |
-|  |  | This matcher | 83.6 | 94.6 | 86.9 |
+|  |  | ror-set-point | 83.6 | 94.6 | 86.9 |
 | `datacite` (baseline, all) | 3,000 | v3.0.0, local | 92.4 | 97.7 | 93.2 |
 |  |  | Baseline | 91.9 | 95.1 | 95.6 |
-|  |  | This matcher | 93.5 | 98.0 | 94.5 |
+|  |  | ror-set-point | 93.5 | 98.0 | 94.5 |
 | `openalex_sample`, sample v1 (baseline, all) | 20,000 | v3.0.0, local | 81.6 | 95.3 | 83.2 |
 |  |  | Baseline | 86.9 | 95.6 | 90.0 |
-|  |  | This matcher | 89.9 | 96.1 | 92.1 |
+|  |  | ror-set-point | 89.9 | 96.1 | 92.1 |
 | `openalex_sample`, sample v2 (baseline, all) | 20,000 | v3.0.0, local | 82.6 | 94.9 | 84.2 |
 |  |  | Baseline | 88.0 | 95.2 | 91.5 |
-|  |  | This matcher | 90.4 | 95.7 | 93.3 |
+|  |  | ror-set-point | 90.4 | 95.7 | 93.3 |
 | `openalex_sample`, high-confidence labels (both samples) | 35,642 | v3.0.0, local | 86.8 | 96.3 | 88.4 |
 |  |  | Baseline | 92.0 | 96.3 | 95.0 |
-|  |  | This matcher | 94.3 | 97.2 | 96.4 |
+|  |  | ror-set-point | 94.3 | 97.2 | 96.4 |
 
-Paired exact match: the strings where only the other system is right, the strings where only this matcher is right, and the exact McNemar p-value:
+Paired exact match: the strings where only the other system is right, the strings where only ror-set-point is right, and the exact McNemar p-value:
 
-| Split | Other system | Only the other system is right | Only this matcher is right | Exact McNemar p |
+| Split | Other system | Only the other system is right | Only ror-set-point is right | Exact McNemar p |
 |---|---|---:|---:|---:|
 | `affiliations` | Baseline | 74 | 150 | 4 × 10⁻⁷ |
 |  | v3.0.0, local | 52 | 279 | 1 × 10⁻³⁸ |
@@ -168,7 +168,7 @@ On `affiliations` test, the 95% bootstrap intervals (2,000 resamples of strings)
 
 | System | Exact match | Precision | Recall |
 |---|---|---|---|
-| This matcher | 88.7–91.3 | 94.8–96.6 | 91.4–93.7 |
+| ror-set-point | 88.7–91.3 | 94.8–96.6 | 91.4–93.7 |
 | Baseline, all | 84.6–87.6 | 95.2–96.9 | 86.7–89.6 |
 | v3.0.0, local | 76.6–80.2 | 93.1–95.4 | 77.1–80.9 |
 
@@ -180,15 +180,15 @@ The validation and test splits of `affiliations_unseen_institutions` name 1,255 
 |---|---:|---:|---|---:|---:|
 | test | 1,755 | 1,694 | v3.0.0, local | 83.6 | 74.5 |
 |  |  |  | Baseline, unseen split | 86.3 | 77.2 |
-|  |  |  | This matcher | 89.6 | 82.8 |
+|  |  |  | ror-set-point | 89.6 | 82.8 |
 | validation | 1,844 | 1,654 | v3.0.0, local | 68.0 | 58.2 |
 |  |  |  | Baseline, unseen split | 84.9 | 72.8 |
-|  |  |  | This matcher | 78.7 | 71.2 |
+|  |  |  | ror-set-point | 78.7 | 71.2 |
 | validation without the CNRS strings | 1,440 | 1,382 | v3.0.0, local | 79.1 | 69.0 |
 |  |  |  | Baseline, unseen split | 83.5 | 75.1 |
-|  |  |  | This matcher | 86.5 | 79.9 |
+|  |  |  | ror-set-point | 86.5 | 79.9 |
 
-The validation split holds the 272 strings that name CNRS. The recall of their links to CNRS is 33.8 for this matcher and 93.8 for the baseline.
+The validation split holds the 272 strings that name CNRS. The recall of their links to CNRS is 33.8 for ror-set-point and 93.8 for the baseline.
 
 ### Set-model variants
 
@@ -220,8 +220,8 @@ No model, setting or training-data rule comes from the scores on a test split. T
 
 ### Notes
 
-- Some test strings are equal to a training string of this matcher. Without these strings, the exact match / precision / recall of this matcher is 90.0 / 95.7 / 92.5 on `affiliations` (1,937 strings). It is 93.2 / 97.9 / 94.2 on `datacite` (2,824 strings), and 90.1 / 95.9 / 92.7 on `openalex_sample` (39,925 strings). `affiliations_unseen_institutions` has no such strings.
-- Of the 3,000 `datacite` strings, 2,140 (71%) are equal, after normalization, to a name, acronym, alias or label of their only gold record. On these strings, exact match is 96.5 for v3.0.0, local, 94.2 for the baseline and 95.5 for this matcher. On the other 860 strings, it is 82.0, 86.0 and 88.6.
+- Some test strings are equal to a training string of ror-set-point. Without these strings, the exact match / precision / recall of ror-set-point is 90.0 / 95.7 / 92.5 on `affiliations` (1,937 strings). It is 93.2 / 97.9 / 94.2 on `datacite` (2,824 strings), and 90.1 / 95.9 / 92.7 on `openalex_sample` (39,925 strings). `affiliations_unseen_institutions` has no such strings.
+- Of the 3,000 `datacite` strings, 2,140 (71%) are equal, after normalization, to a name, acronym, alias or label of their only gold record. On these strings, exact match is 96.5 for v3.0.0, local, 94.2 for the baseline and 95.5 for ror-set-point. On the other 860 strings, it is 82.0, 86.0 and 88.6.
 - v3.0.0 and the baseline used the whole OpenAlex non-Latin file, with its test rows, for some design choices. Their scores on the non-Latin rows of `affiliations` test can be high for that reason.
 - The answers depend a little on the candidate lists. A search in another numeric precision, or another random order of the candidates, changes some answers. On the two validation splits, another order of the same candidates changed the answers of 3 to 5% of the strings. Over 8 orders, exact match changed by up to 1.3 points. Differences of this size between two systems are not meaningful.
 
@@ -233,27 +233,27 @@ The answers on the validation splits come from the training run of each model.
 |---|---:|---|---:|---:|---:|
 | `affiliations` | 1,947 | v3.0.0, local | 80.1 | 93.5 | 79.6 |
 |  |  | Baseline, unseen split | 85.7 | 94.7 | 87.4 |
-|  |  | This matcher | 91.0 | 96.5 | 91.9 |
+|  |  | ror-set-point | 91.0 | 96.5 | 91.9 |
 | `affiliations_crossref` | 449 | v3.0.0, local | 85.7 | 97.7 | 84.4 |
 |  |  | Baseline, unseen split | 92.0 | 97.7 | 92.7 |
-|  |  | This matcher | 93.3 | 98.3 | 93.1 |
+|  |  | ror-set-point | 93.3 | 98.3 | 93.1 |
 | `affiliations_openalex` | 748 | v3.0.0, local | 84.4 | 94.1 | 86.7 |
 |  |  | Baseline, unseen split | 88.5 | 94.3 | 92.1 |
-|  |  | This matcher | 92.4 | 96.8 | 94.3 |
+|  |  | ror-set-point | 92.4 | 96.8 | 94.3 |
 | `affiliations_openalex_non_latin` | 750 | v3.0.0, local | 72.4 | 88.8 | 66.9 |
 |  |  | Baseline, unseen split | 79.1 | 92.4 | 77.3 |
-|  |  | This matcher | 88.3 | 94.6 | 88.0 |
+|  |  | ror-set-point | 88.3 | 94.6 | 88.0 |
 | `affiliations_unseen_institutions` | 1,914 | v3.0.0, local | 62.7 | 96.5 | 67.7 |
 |  |  | Baseline, unseen split | 75.0 | 94.8 | 84.8 |
-|  |  | This matcher | 73.9 | 95.4 | 81.7 |
+|  |  | ror-set-point | 73.9 | 95.4 | 81.7 |
 
 The `affiliations_unseen_institutions` validation split holds 272 links to CNRS. Most of these strings name CNRS only with its acronym, inside the name of a laboratory.
 
-### Where this matcher errs
+### Where ror-set-point errs
 
 On the `affiliations_unseen_institutions` validation split without the CNRS strings (1,642 strings, 2,306 links):
 
-| Gold links | Links | Baseline recall | This matcher recall |
+| Gold links | Links | Baseline recall | ror-set-point recall |
 |---|---:|---:|---:|
 | Named by a name of the record | 1,476 | 96.1 | 93.0 |
 | Named by an acronym only | 147 | 76.9 | 78.2 |
@@ -262,7 +262,7 @@ On the `affiliations_unseen_institutions` validation split without the CNRS stri
 | In strings that name several records | 1,522 | 80.6 | 81.0 |
 | In non-Latin strings | 362 | 72.9 | 82.9 |
 
-Of the 335 links that this matcher misses, 39 are not among the candidates. The set model scores the other 296 below the threshold. Thus most errors come from the set model, not from the retriever.
+Of the 335 links that ror-set-point misses, 39 are not among the candidates. The set model scores the other 296 below the threshold. Thus most errors come from the set model, not from the retriever.
 
 ## Reproduce the results
 
