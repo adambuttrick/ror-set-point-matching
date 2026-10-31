@@ -101,7 +101,13 @@ The training script does these steps in sequence:
 
 The calibration of the released model is a = 0.818 and b = -0.071. It was fitted on 615,010 out-of-fold candidates. On the out-of-fold answers, precision is 95.4, recall 94.3 and exact match 90.9.
 
-On the validation splits, p from 0.05 to 0.5 is lower than the frequency of correct candidates. The difference is large for new institutions. On the `affiliations_unseen_institutions` validation split, 58% of the candidates with p from 0.2 to 0.35 are correct. Of the candidates with p from 0.35 to 0.5, 56% are correct. Thus the threshold 0.5 leaves out some correct records of new institutions.
+On the out-of-fold candidates, p agrees with the frequency of correct candidates. For example, the candidates with p from 0.35 to 0.5 have a mean p of 0.42, and 47% of them are correct. On the `affiliations` validation split, a new fit gives a = 0.807 and b = 0.108, near the values of the released model.
+
+On the `affiliations_unseen_institutions` validation split, p from 0.05 to 0.5 is lower than the frequency of correct candidates. For example, 58% of the candidates with p from 0.2 to 0.35 are correct. This split is not a measure of calibration. It contains every labeled string that names a held-out record. Thus a candidate that is a held-out record is correct more frequently in this split than in other strings. In this split, 41% of these candidates are correct, and on the `affiliations` validation split 7.8%. When only this share changes, b moves by the change in its log-odds (2.1). A new fit on these candidates gives b = 3.30 on this split and b = 1.05 on the `affiliations` validation split, a difference of 2.25.
+
+On the `affiliations` validation split, the difference for held-out records is smaller. Of the 23 candidates that are held-out records and have p from 0.05 to 0.5, 13 are correct. For the other records with no positive in training, p is equal to or higher than the frequency of correct candidates. A threshold below 0.5 decreases exact match on this split, for example from 91.0 to 90.4 at 0.3.
+
+The values come from `oof.jsonl.gz` and `probabilities.jsonl.gz` in the repository of the released model.
 
 ## Hardware and time
 
