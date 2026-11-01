@@ -3,7 +3,7 @@ selects the records that each string names.
 
     python -m ror_set_point.inference.match run --input strings.jsonl --records records \
         --retriever adambuttrick/ror-set-point-retriever-e5-base \
-        --set-model adambuttrick/ror-set-point-set-model-mmbert-base --out answers.jsonl
+        --set-model adambuttrick/ror-set-point-set-model-mmbert-base-mask --out answers.jsonl
 
 Modes:
   candidates  writes {id, text, candidates}: the retriever's top --k, then the lexical top --lexical-k that are not

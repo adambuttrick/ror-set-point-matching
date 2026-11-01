@@ -1,6 +1,6 @@
 """Measure the speed of the set model, and compare its scores with the reference way.
 
-    python -m ror_set_point.inference.bench --set-model adambuttrick/ror-set-point-set-model-mmbert-base \
+    python -m ror_set_point.inference.bench --set-model adambuttrick/ror-set-point-set-model-mmbert-base-mask \
         --records records --input candidates.jsonl --batch-tokens 32768,65536,131072 --reference
 
 --input holds candidate rows: {text, candidates} (match candidates) or {s, c} (the eval rows of the set model's

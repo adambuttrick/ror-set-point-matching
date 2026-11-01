@@ -5,7 +5,7 @@ The input is [start] string [sep] record 1 [sep] record 2 [sep] ... A linear lay
 mean of its token states. Platt scaling, p = 1 / (1 + exp(-(a * score + b))), makes the scores probabilities. The
 answer is every candidate with p >= the threshold (0.5).
 
-    m = SetMatcher.from_pretrained("adambuttrick/ror-set-point-set-model-mmbert-base", record_texts)
+    m = SetMatcher.from_pretrained("adambuttrick/ror-set-point-set-model-mmbert-base-mask", record_texts)
     m.predict([("Dept. of Physics, University of Tokyo, Japan", ["https://ror.org/057zh3y96", ...])])
     # -> [[("https://ror.org/057zh3y96", 0.99...)]]
 

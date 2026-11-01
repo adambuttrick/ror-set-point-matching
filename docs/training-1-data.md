@@ -124,7 +124,7 @@ The largest group (399 strings) holds every string that names CNRS (`https://ror
 
 The evaluation strings are the validation and test splits of `affiliations_unseen_institutions`, and the `affiliations` validation split.
 
-A teacher string that gives a held-out record a p below 0.5 stays. Stage 1 of the set model uses the teacher's p as its target. Thus 9,606 of its strings have a target from 0.1 to 0.49 for a held-out record. On the validation and test splits, the recall of a held-out record does not increase with the sum of its targets.
+A teacher string that gives a held-out record a p below 0.5 stays. Stage 1 of the set model uses the teacher's p as its target. Thus 9,606 of its strings have a target from 0.1 to 0.49 for a held-out record. When the string mentions the record, the mention mask of phase 4 removes the record from the loss of that row ([phase 4](training-4-set-model.md#the-mention-mask)).
 
 ## Check the result
 

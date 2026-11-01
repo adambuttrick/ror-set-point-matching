@@ -48,7 +48,7 @@ The options of the steps are environment variables (`-e NAME=value`). These opti
 | `DOWNLOADS` | `/bucket/downloads` | The ROR zip and `institutions.jsonl.gz` |
 | `INSTITUTIONS` | `$DOWNLOADS/institutions.jsonl.gz` | The institutions file of openalex-affiliation-matcher v3.0.0. Step 1 makes `openalex_to_ror.json` (OpenAlex institution IDs to ROR IDs) from it |
 | `RETRIEVER` | `adambuttrick/ror-set-point-retriever-e5-base` | A retriever folder or Hub repository |
-| `SET_MODEL` | `adambuttrick/ror-set-point-set-model-mmbert-base` | A set-model folder or Hub repository |
+| `SET_MODEL` | `adambuttrick/ror-set-point-set-model-mmbert-base-mask` | A set-model folder or Hub repository |
 | `VECTORS` | `/bucket/index/<name of RECORDS>/<name of RETRIEVER>.pt` | The index |
 
 After the steps, the bucket holds these files:
@@ -156,7 +156,7 @@ jobs/submit.sh pipeline --flavor h200 --timeout 3h --attempts 3 \
 
 ```
 jobs/submit.sh verify --flavor h200 --timeout 1h -e RUN=/bucket/runs/verify-h200 \
-    -v hf://adambuttrick/ror-set-point-set-model-mmbert-base:/set_model
+    -v hf://adambuttrick/ror-set-point-set-model-mmbert-base-mask:/set_model
 ```
 
 `verify.sh` checks the code and the released models against the published results. It makes the records folder of v2.14 and compares it with the dataset, and it makes the index. Then, for each of the four test splits, it does these steps:
@@ -167,18 +167,18 @@ jobs/submit.sh verify --flavor h200 --timeout 1h -e RUN=/bucket/runs/verify-h200
 
 `RUN/summary.md` holds the results. Use the check after a change to the code, the image or the versions of the packages.
 
-On 1 × NVIDIA H200 (25 October 2026):
+On 1 × NVIDIA H200 (1 November 2026):
 
 | Test split | Strings | Same candidate list | Same answer | This run and published |
 |---|---:|---:|---:|---|
-| `affiliations` | 1,947 | 100% | 1,947 | 90.0 / 95.7 / 92.6 |
-| `affiliations_unseen_institutions` | 1,957 | 100% | 1,957 | 83.6 / 94.6 / 86.9 |
-| `datacite` | 3,000 | 100% | 3,000 | 93.5 / 98.0 / 94.5 |
-| `openalex_sample` | 40,000 | 100% | 40,000 | 90.1 / 95.9 / 92.7 |
+| `affiliations` | 1,947 | 100% | 1,947 | 90.4 / 96.1 / 92.6 |
+| `affiliations_unseen_institutions` | 1,957 | 100% | 1,957 | 84.7 / 94.6 / 87.4 |
+| `datacite` | 3,000 | 100% | 3,000 | 93.1 / 97.8 / 94.4 |
+| `openalex_sample` | 40,000 | 100% | 40,000 | 90.2 / 96.0 / 92.7 |
 
 The values are exact match / precision / recall, in percent. The candidate lists are equal, in the same order, and the answers are equal.
 
-On 4 × NVIDIA L4, with one part of each split on each GPU:
+On 4 × NVIDIA L4, with one part of each split on each GPU, with [ror-set-point-set-model-mmbert-base](https://huggingface.co/adambuttrick/ror-set-point-set-model-mmbert-base) (the set model without the mention mask) and its published answers:
 
 | Test split | Same candidate set | Same candidate list | Same answer | This run | Only this run right | Only published right |
 |---|---:|---:|---:|---|---:|---:|
@@ -196,7 +196,7 @@ On the `affiliations` test split, these pairs of runs gave the same candidates f
 | 1 × L4 and the H200 | 89.9% | 26.8% |
 | 1 × L4 and 4 × L4 | 96.0% | 74.4% |
 
-On `openalex_sample` test, `verify.sh` on 1 × L4 gave the same answer as the H200 for 99.35% of the strings. Use an H200 to get the published candidates again.
+On `openalex_sample` test, `verify.sh` on 1 × L4 gave the same answer as the H200 for 99.35% of the strings, with the set model without the mention mask. Use an H200 to get the published candidates again.
 
 ## Times and costs
 
