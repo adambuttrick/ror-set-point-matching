@@ -65,6 +65,6 @@ RECORDS=${RECORDS:-/bucket/records/$ROR_VERSION}
 DOWNLOADS=${DOWNLOADS:-/bucket/downloads}
 INSTITUTIONS=${INSTITUTIONS:-$DOWNLOADS/institutions.jsonl.gz}
 RETRIEVER=${RETRIEVER:-adambuttrick/ror-set-point-retriever-e5-base}
-SET_MODEL=${SET_MODEL:-adambuttrick/ror-set-point-set-model-mmbert-base}
+SET_MODEL=${SET_MODEL:-adambuttrick/ror-set-point-set-model-mmbert-base-mask}
 VECTORS=${VECTORS:-/bucket/index/$(basename "$RECORDS")/${RETRIEVER##*/}.pt}
 export ROR_VERSION RECORDS DOWNLOADS INSTITUTIONS RETRIEVER SET_MODEL VECTORS

@@ -6,7 +6,7 @@ Stage 1 trains on stage1.jsonl.gz (teacher and synthetic rows) for one epoch at 
 stage2.jsonl.gz (labeled rows) for --epochs2 epochs at --lr / 2, from the stage 1 weights: once for each fold, to
 get out-of-fold scores, and once on all rows (the final model). Platt scaling (a * score + b) is fitted on the
 out-of-fold scores of every candidate. The loss is binary cross-entropy against the targets, over the real
-candidates. AdamW (weight decay 0.01), linear warm-up for 5% of the steps then linear decay, bf16 autocast on CUDA,
+candidates that are not masked (m = 0, from build --mask-mentions). AdamW (weight decay 0.01), linear warm-up for 5% of the steps then linear decay, bf16 autocast on CUDA,
 gradient clipping 1.0.
 
 --stage1 FILE writes the stage 1 weights to FILE. When FILE exists, they are read from it and stage 1 is not
@@ -39,7 +39,7 @@ def targets(rows, n, dev):
     real = torch.zeros((len(rows), n), dtype=torch.bool)
     for i, r in enumerate(rows):
         y[i, :len(r["y"])] = torch.tensor(r["y"])
-        real[i, :len(r["c"])] = True
+        real[i, :len(r["c"])] = torch.tensor(r["m"], dtype=torch.bool) if "m" in r else True
     return y.to(dev), real.to(dev)
 
 

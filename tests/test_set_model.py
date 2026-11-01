@@ -1,11 +1,15 @@
+import collections
 from types import SimpleNamespace
 
 import pytest
 import torch
 from transformers import BertConfig, BertModel
 
+from ror_set_point.common.io import read_jsonl, write_jsonl
 from ror_set_point.inference.set_model import (Packer, SetModel, calibrate, packed_scores, ranges, scores,
                                                token_batches)
+from ror_set_point.training.set_model.build import mask_mentions, mention_test
+from ror_set_point.training.set_model.train import targets
 
 
 class CharTokenizer:
@@ -132,3 +136,55 @@ def test_packed_scores_are_the_padded_scores(batch_tokens):
 def test_calibrate_is_a_rounded_sigmoid():
     assert calibrate(0.0, 1.0, 0.0) == 0.5
     assert calibrate(2.0, 0.8, -0.1) == round(1 / (1 + 2.718281828459045 ** -1.5), 4)
+
+
+def ror(i, name, acronyms=(), aliases=()):
+    return {"ror_id": f"r{i}", "name": name, "acronyms": list(acronyms), "labels": [], "aliases": list(aliases)}
+
+
+RECORDS = [ror(1, "Centre National de la Recherche Scientifique", ["CNRS"]), ror(2, "Ministry of Health"),
+           ror(3, "Ministry of Health"), ror(4, "Universidade Federal do Rio Grande", ["FURG"]),
+           ror(5, "Universidade Federal do Rio Grande do Norte", ["UFRN"]), ror(6, "Kyoto University", ["KU"], ["Kyodai"]),
+           ror(7, "Universidad Nacional", ["UNA"]), ror(8, "Universidade Nova de Angola", ["UNA"])]
+
+
+def test_a_mention_is_a_name_or_acronym_of_one_record():
+    m = mention_test(RECORDS)
+    assert m("UMR 8000, CNRS, Paris", "r1")
+    assert not m("UMR 8000, cnrs, Paris", "r1")  # acronyms keep their case
+    assert m("Centre national de la recherche scientifique (Paris)", "r1")
+    assert m("Dept. of Physics, Kyodai", "r6")
+    assert not m("Ministry of Health, Lima", "r2")  # two records have this name
+    assert not m("UNA, Lima", "r7")  # two records have this acronym
+    assert not m("KU, Japan", "r6")  # fewer than 3 characters
+    s = "Universidade Federal do Rio Grande do Norte, Natal"
+    assert m(s, "r4")
+    assert not m(s, "r4", gold=["r5"])  # part of a name of a gold record
+    assert m("Universidade Federal do Rio Grande; UFRN", "r4", gold=["r5"])
+
+
+def test_mask_mentions_leaves_out_mentioned_negatives_that_have_no_positive(tmp_path):
+    stage1 = [{"s": "Lab, CNRS, Paris", "c": ["r1", "r6", "r2"], "y": [0.1, 0.0, 0.0], "src": "teacher"},
+              {"s": "Kyoto University", "c": ["r6", "r1"], "y": [0.9, 0.0], "src": "teacher"}]
+    stage2 = [{"k": "a", "s": "Kyoto University; Ministry of Health", "c": ["r6", "r2", "r7"], "y": [0.0, 1.0, 0.0],
+               "fold": 0},
+              {"k": "b", "s": "Universidade Federal do Rio Grande do Norte", "c": ["r5", "r4"], "y": [1.0, 0.0],
+               "fold": 1}]
+    write_jsonl(str(tmp_path / "stage1.jsonl.gz"), stage1)
+    write_jsonl(str(tmp_path / "stage2.jsonl.gz"), stage2)
+    counts = collections.Counter()
+    mask_mentions(str(tmp_path), RECORDS, counts)
+    out1 = list(read_jsonl(str(tmp_path / "stage1.jsonl.gz")))
+    out2 = list(read_jsonl(str(tmp_path / "stage2.jsonl.gz")))
+    # r1 has no positive and the string has its acronym. r6 has a positive (stage 1), and r4 is a part of r5's name
+    assert out1[0]["m"] == [0, 1, 1]
+    assert out1[1] == stage1[1] and out2 == stage2
+    assert counts == {"stage1_masked_rows": 1, "stage1_masked_candidates": 1}
+    assert sorted(x.name for x in tmp_path.iterdir()) == ["stage1.jsonl.gz", "stage2.jsonl.gz"]
+
+
+def test_masked_candidates_are_not_in_the_loss():
+    rows = [{"c": ["a", "b", "c"], "y": [1.0, 0.0, 0.0], "m": [1, 0, 1]}, {"c": ["a"], "y": [0.0]}]
+    y, real = targets(rows, 3, torch.device("cpu"))
+    assert real.tolist() == [[True, False, True], [True, False, False]]
+    assert y.tolist() == [[1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]

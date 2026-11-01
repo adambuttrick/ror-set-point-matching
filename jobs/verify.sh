@@ -6,7 +6,7 @@
 # published answers and scored against the gold links. The published files are in the set model's repository, which
 # submit.sh mounts at /set_model with this option:
 #
-#   -v hf://adambuttrick/ror-set-point-set-model-mmbert-base:/set_model
+#   -v hf://adambuttrick/ror-set-point-set-model-mmbert-base-mask:/set_model
 #
 #   RUN     the folder for the outputs (default /bucket/runs/verify). A run that stops continues there
 #   SPLITS  the splits (default: the four test splits). The published files have answers for the four test splits

@@ -6,16 +6,23 @@
         --eval unseen_validation unseen/validation.jsonl --eval unseen_test unseen/test.jsonl \
         --eval affiliations_validation affiliations/validation.jsonl --out set_data
 
-  stage1.jsonl.gz  {s, c, y, src}      teacher: the retriever's top --k, then the records the teacher judged that are
-                                       not in it (positives first), to --cap; y = the teacher's p, 0 where it gave none.
-                                       synthetic: the retriever's top --k; y = 1 for the labels, 0 for other records
-  stage2.jsonl.gz  {k, s, c, y, fold}  the labeled train split: the retriever's top --k and the lexical top
-                                       --lexical-k; y = 1 for the labels; fold = sha256(fold seed|id) mod --folds
-  eval.jsonl.gz    {set, k, s, c}      each --eval split, as at run time, with no labels
+  stage1.jsonl.gz  {s, c, y, src[, m]}      teacher: the retriever's top --k, then the records the teacher judged
+                                            that are not in it (positives first), to --cap; y = the teacher's p, 0
+                                            where it gave none. synthetic: the retriever's top --k; y = 1 for the
+                                            labels, 0 for other records
+  stage2.jsonl.gz  {k, s, c, y, fold[, m]}  the labeled train split: the retriever's top --k and the lexical top
+                                            --lexical-k; y = 1 for the labels; fold = sha256(fold seed|id) mod --folds
+  eval.jsonl.gz    {set, k, s, c}           each --eval split, as at run time, with no labels
 In training rows, a label that is not among the candidates replaces a random candidate that is not a label (or is
 added, when the list is shorter than --cap). Teacher strings that ror_set_point.common.exclusions leaves out are not
 used. Labeled and synthetic strings that are equal to an evaluation string are left out. --strict also leaves out
 the synthetic strings that name a held-out record, so that no training row has a positive for a held-out record.
+
+--mask-mentions adds m to the training rows that need it (1: the candidate is in the loss, 0: it is not). A candidate
+gets 0 when its target is below 0.5, its record has no positive in any training row, and the string mentions the
+record (mention_test). The exclusion rule removes the teacher strings that give a held-out record p >= 0.5, and keeps
+those that give it less. Thus without the mask, the training rows teach that a held-out record is wrong also when
+the string names it.
 
 --retrieved is the training run's topk.jsonl.gz (ror_set_point.training.retriever.train), which has the queries of
 ror_set_point.training.retriever.build. Writes into --out (which must not exist): those files, records.jsonl.gz {ror_id,
@@ -27,12 +34,60 @@ import hashlib
 import json
 import os
 import random
+import re
 import sys
 
 from ror_set_point.common.exclusions import evaluation_texts, held_out_records, teacher_exclusion
 from ror_set_point.common.io import read_jsonl, sha256, write_jsonl, write_manifest
 from ror_set_point.common.records import read_records
 from ror_set_point.common.text import normalize
+
+
+def mention_test(records):
+    """A function mentions(s, x, gold) that is True when the string s mentions the record x. s mentions x when it
+    contains one of the names of x (normalized, at least 6 characters) as a phrase, or one of its acronyms (at least 3
+    characters) as a whole word with the same case. Only names and acronyms of exactly one record count, so that a
+    generic name (for example "Ministry of Health") is not a mention. A name that is part of a name of a gold record
+    in s (for example "Universidade Federal do Rio Grande" in "Universidade Federal do Rio Grande do Norte") is not a
+    mention."""
+    records = list(records)
+    norm = {r["ror_id"]: {normalize(x) for x in [r["name"]] + [l["v"] for l in r["labels"]] + r["aliases"]}
+            for r in records}
+    n_count = collections.Counter(n for ns in norm.values() for n in ns)
+    a_count = collections.Counter(x for r in records for x in dict.fromkeys(r["acronyms"]))
+    names = {k: [f" {n} " for n in ns if len(n) >= 6 and n_count[n] == 1] for k, ns in norm.items()}
+    acronyms = {r["ror_id"]: [x for x in r["acronyms"] if len(x) >= 3 and a_count[x] == 1] for r in records}
+
+    def mentions(s, x, gold=()):
+        padded, words = f" {normalize(s)} ", re.findall(r"\w+", s)
+        if any(w in words for w in acronyms.get(x, ())):
+            return True
+        inside = [n for g in gold for n in names.get(g, ()) if n in padded]
+        return any(n in padded and not any(n in m for m in inside) for n in names.get(x, ()))
+    return mentions
+
+
+def mask_mentions(out, records, counts):
+    """Add m to the rows of out/stage1.jsonl.gz and out/stage2.jsonl.gz (see --mask-mentions)."""
+    paths = {x: os.path.join(out, f"{x}.jsonl.gz") for x in ("stage1", "stage2")}
+    pos = {x for p in paths.values() for r in read_jsonl(p) for x, t in zip(r["c"], r["y"]) if t >= 0.5}
+    mentions = mention_test(records)
+
+    def rows(stage):
+        for r in read_jsonl(paths[stage]):
+            gold = [x for x, t in zip(r["c"], r["y"]) if t >= 0.5]
+            m = [0 if t < 0.5 and x not in pos and mentions(r["s"], x, gold) else 1 for x, t in zip(r["c"], r["y"])]
+            if not all(m):
+                r["m"] = m
+                counts[f"{stage}_masked_rows"] += 1
+                counts[f"{stage}_masked_candidates"] += m.count(0)
+            yield r
+    tmp = os.path.join(out, "masked")  # the same file names, because gzip writes the name into the file
+    os.makedirs(tmp)
+    for stage, path in paths.items():
+        write_jsonl(os.path.join(tmp, os.path.basename(path)), rows(stage))
+        os.replace(os.path.join(tmp, os.path.basename(path)), path)
+    os.rmdir(tmp)
 
 
 def main():
@@ -52,6 +107,8 @@ def main():
     ap.add_argument("--fold-seed", default="20261022")
     ap.add_argument("--workers", type=int, default=1, help="processes for the lexical index")
     ap.add_argument("--strict", action="store_true", help="leave out synthetic strings with a held-out record")
+    ap.add_argument("--mask-mentions", action="store_true",
+                    help="leave out of the loss the negatives that the string mentions and that have no positive")
     ap.add_argument("--out", required=True)
     ap.add_argument("-v", "--verbose", action="store_true")
     a = ap.parse_args()
@@ -130,9 +187,12 @@ def main():
 
     write_jsonl(os.path.join(a.out, "stage1.jsonl.gz"), stage1())
     write_jsonl(os.path.join(a.out, "stage2.jsonl.gz"), stage2())
+    if a.mask_mentions:
+        mask_mentions(a.out, read_records(a.records), counts)
     write_jsonl(os.path.join(a.out, "eval.jsonl.gz"), evaluation())
     write_manifest(a.out, eval_sets=[n for n, _ in a.eval], folds=a.folds,
-                   settings={x: getattr(a, x) for x in ("k", "lexical_k", "cap", "seed", "fold_seed", "strict")},
+                   settings={x: getattr(a, x) for x in ("k", "lexical_k", "cap", "seed", "fold_seed", "strict",
+                                                        "mask_mentions")},
                    inputs={x: sha256(getattr(a, x)) for x in ("retrieved", "teacher", "labelled", "synthetic",
                                                               "held_out")},
                    counts=dict(sorted(counts.items())))

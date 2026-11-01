@@ -16,7 +16,7 @@ This document tells how to match affiliation strings to ROR records with the tra
 |---|---|
 | A records folder | `data/ror_records` of the dataset, or [phase 1, step 1](training-1-data.md#step-1-make-the-records-folder). Use the ROR release of the models (v2.14 for the released models) |
 | A retriever | A model folder from phase 3, or `adambuttrick/ror-set-point-retriever-e5-base` |
-| A set model | A model folder from phase 4, or `adambuttrick/ror-set-point-set-model-mmbert-base` |
+| A set model | A model folder from phase 4, or `adambuttrick/ror-set-point-set-model-mmbert-base-mask` |
 
 The lexical index and the retriever read the records of the records folder. With a folder of a later release, they also find its new records. The models did not train on these records.
 
@@ -25,7 +25,7 @@ The lexical index and the retriever read the records of the records folder. With
 ```
 uv run python -m ror_set_point.inference.match run --input strings.jsonl --records dataset/data/ror_records \
     --retriever adambuttrick/ror-set-point-retriever-e5-base \
-    --set-model adambuttrick/ror-set-point-set-model-mmbert-base --record-vectors record_vectors.pt \
+    --set-model adambuttrick/ror-set-point-set-model-mmbert-base-mask --record-vectors record_vectors.pt \
     --out answers.jsonl
 ```
 
@@ -68,7 +68,7 @@ Do the steps apart when you want to keep or examine the candidates.
 
    ```
    uv run python -m ror_set_point.inference.match answer --input candidates.jsonl --records dataset/data/ror_records \
-       --set-model adambuttrick/ror-set-point-set-model-mmbert-base --out answers.jsonl
+       --set-model adambuttrick/ror-set-point-set-model-mmbert-base-mask --out answers.jsonl
    ```
 
 The candidates are the retriever's top 32 (`--k`), then the lexical top 10 (`--lexical-k`) that are not already there. The list stops at 42 (`--cap`). The order of the candidates is random, but it is always the same for a given string and seed (`--seed`, 1363). The set model trained on candidates in a random order. Another order can change the answer for a small number of strings.
@@ -80,7 +80,7 @@ from ror_set_point.inference.match import Matcher
 
 m = Matcher("records",
             "adambuttrick/ror-set-point-retriever-e5-base",
-            "adambuttrick/ror-set-point-set-model-mmbert-base",
+            "adambuttrick/ror-set-point-set-model-mmbert-base-mask",
             record_vectors="record_vectors.pt")
 m.match(["Dept. of Physics, University of Tokyo, Japan"])
 # -> [[("https://ror.org/057zh3y96", 0.99...)]]
@@ -95,6 +95,8 @@ Use the parts apart for other tasks:
 - `SetMatcher.from_pretrained(model, record_texts).probabilities(items)` gives the probability of every candidate. `items` is a list of `(string, [candidate ROR IDs])`. Give all the items in one call: the set model then makes its own batches (`batch_tokens`). `compile=False` turns off torch.compile.
 
 ## Speed and memory
+
+The measurements in this section and in [Notes](#notes) use [ror-set-point-set-model-mmbert-base](https://huggingface.co/adambuttrick/ror-set-point-set-model-mmbert-base), the set model without the mention mask. It has the same architecture, size and input limits as the released set model. Thus the times and the memory are the same. The scores in the tables are the scores of that model.
 
 | Part | Apple M4 | NVIDIA H200 |
 |---|---|---|
@@ -207,7 +209,7 @@ The values are exact match / precision / recall, in percent. No difference is si
 To measure the speed, and to compare the scores with the padded way:
 
 ```
-uv run python -m ror_set_point.inference.bench --set-model adambuttrick/ror-set-point-set-model-mmbert-base \
+uv run python -m ror_set_point.inference.bench --set-model adambuttrick/ror-set-point-set-model-mmbert-base-mask \
     --records dataset/data/ror_records --input candidates.jsonl --compile on,off --reference
 ```
 
