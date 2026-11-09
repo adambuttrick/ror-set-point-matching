@@ -7,6 +7,12 @@ string and OpenAlex institution) into the teacher_judgments config: one row per 
 An OpenAlex id goes to the ROR id of its institution, resolved in the records folder (a withdrawn record goes to its
 successor). A judgment with no ROR id is dropped. When two judgments of a string get the same ROR id, the higher p
 stays. Writes --out/train.jsonl and --out/validation.jsonl ({id, text, judgments [{ror_id, p}]}) and manifest.json.
+
+The p of the output is Jev's p. The output is the teacher_judgments config of the dataset
+ror-set-point-matching-train-validation-test-openalex-jev-distill, which the -openalex-jev-distill models learn from.
+ror_set_point.training.data.relabel reads its pairs and gives each pair a new p. That makes the teacher_judgments
+config of ror-set-point-matching-train-validation-test, which the released models learn from. The split step
+(ror_set_point.training.data.split) reads the strings only, which are the same in the two configs.
 """
 import argparse
 import collections

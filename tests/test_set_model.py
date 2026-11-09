@@ -1,4 +1,5 @@
 import collections
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -8,6 +9,7 @@ from transformers import BertConfig, BertModel
 from ror_set_point.common.io import read_jsonl, write_jsonl
 from ror_set_point.inference.set_model import (Packer, SetModel, calibrate, packed_scores, ranges, scores,
                                                token_batches)
+from ror_set_point.training.set_model import build
 from ror_set_point.training.set_model.build import mask_mentions, mention_test
 from ror_set_point.training.set_model.train import targets
 
@@ -188,3 +190,35 @@ def test_masked_candidates_are_not_in_the_loss():
     y, real = targets(rows, 3, torch.device("cpu"))
     assert real.tolist() == [[True, False, True], [True, False, False]]
     assert y.tolist() == [[1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+
+
+def test_build_stops_at_a_string_without_a_search_result(tmp_path, monkeypatch):
+    names = ["Kyoto University", "Osaka University", "Tohoku University", "Nagoya University"]
+    (tmp_path / "records").mkdir()
+    write_jsonl(str(tmp_path / "records" / "records.jsonl.gz"),
+                [{"ror_id": f"r{i}", "status": "active", "name": n, "acronyms": [], "labels": [], "aliases": [],
+                  "places": [{"city": "City", "region": None, "country": "Japan", "cc": "JP"}], "types": ["education"],
+                  "text": n} for i, n in enumerate(names, 1)])
+    files = {"teacher": [{"id": "t1", "text": "Physics, Kyoto University", "judgments": [{"ror_id": "r1", "p": 0.9}]},
+                         {"id": "t2", "text": "Osaka University", "judgments": [{"ror_id": "r2", "p": 0.95}]}],
+             "labelled": [{"id": "l1", "text": "Tohoku University, Sendai", "ror_ids": ["r3"]}],
+             "synthetic": [{"text": "名古屋大学", "ror_ids": ["r4"], "ror_id": "r4"}],
+             "held": [], "eval": [{"id": "e1", "text": "Kyoto Univ."}]}
+    for k, rows in files.items():
+        write_jsonl(str(tmp_path / f"{k}.jsonl"), rows)
+    top = [{"set": s, "id": k, "ids": ["r1", "r2", "r3", "r4"]}
+           for s, k in [("teacher", "t1"), ("labelled", "l1"), ("synthetic", 0), ("ev", "e1")]]
+
+    def run(out):
+        p = lambda x: str(tmp_path / x)
+        monkeypatch.setattr(sys, "argv", [
+            "build", "--records", p("records"), "--retrieved", p("topk.jsonl.gz"), "--teacher", p("teacher.jsonl"),
+            "--labelled", p("labelled.jsonl"), "--synthetic", p("synthetic.jsonl"), "--held-out", p("held.jsonl"),
+            "--eval", "ev", p("eval.jsonl"), "--out", p(out)])
+        build.main()
+    write_jsonl(str(tmp_path / "topk.jsonl.gz"), top)
+    with pytest.raises(SystemExit, match="no search result for the teacher string 't2'"):
+        run("out1")
+    write_jsonl(str(tmp_path / "topk.jsonl.gz"), top + [{"set": "teacher", "id": "t2", "ids": ["r2", "r1"]}])
+    run("out2")
+    assert [r["src"] for r in read_jsonl(str(tmp_path / "out2" / "stage1.jsonl.gz"))] == ["teacher"] * 2 + ["synthetic"]

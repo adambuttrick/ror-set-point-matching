@@ -14,7 +14,7 @@ flowchart LR
     subgraph stage1 ["Stage 1: find the candidates"]
         R["Retriever<br/>(dual encoder)"]
         L["Lexical index<br/>(names and acronyms)"]
-        C["Candidate list<br/>(about 37 records,<br/>random order)"]
+        C["Candidate list<br/>(about 38 records,<br/>random order)"]
     end
     subgraph stage2 ["Stage 2: select the records"]
         M["Set model<br/>(cross-encoder)"]
@@ -45,7 +45,7 @@ flowchart LR
 
 ### Stage 1: find the candidates
 
-The set model is too slow to read all 143,284 records for each string. Thus stage 1 uses two faster methods to find about 37 candidates.
+The set model is too slow to read all 143,284 records for each string. Thus stage 1 uses two faster methods to find about 38 candidates.
 
 The retriever is a dual encoder. Its base model is multilingual-e5-base. It changes the string and each record text separately into vectors. Thus the record vectors are made one time, and all strings use them. The retriever keeps the 32 records whose vectors have the highest dot product with the string vector. It finds records also when the string uses different words, for example a name in another language or script ([phase 3](docs/training-3-retriever.md)).
 
@@ -53,7 +53,7 @@ The lexical index finds records whose names or acronyms are in the string. Its c
 
 The lexical index finds exact names and acronyms that the retriever can miss. The retriever finds records whose names are not in the string, for example a translated or short name.
 
-The candidate list starts with the 32 records of the retriever. The matcher then adds the lexical records that are not already in the list. It puts the list in a random order that depends only on the string. The set model trained on candidates in a random order. Thus the order does not tell it which method found a record. The set model can select only candidates. On the four test splits, the candidate list holds 97.6% to 99.4% of the correct links.
+The candidate list starts with the 32 records of the retriever. The matcher then adds the lexical records that are not already in the list. It puts the list in a random order that depends only on the string. The set model trained on candidates in a random order. Thus the order does not tell it which method found a record. The set model can select only candidates. On the four test splits, the candidate list holds 97.7% to 99.8% of the correct links.
 
 ### Stage 2: select the records
 
@@ -73,7 +73,7 @@ The name comes from two parts of the matcher. The set model reads the candidates
 
 - The lexical candidate generator. `src/ror_set_point/inference/lexical.py` adapts its code (MIT license). Here it reads the ROR records, and it has no bonus for the works count of an institution.
 - Its institutions file (`models/institutions.jsonl.gz`). It maps OpenAlex institution IDs to ROR IDs, for the teacher judgments and for answers with OpenAlex institution IDs.
-- Its teacher judgments: 3.8 million judgments of (string, institution) pairs by Jev, a decision model from TypeSafe AI.
+- Its teacher pairs: the 3.8 million (string, institution) pairs that Jev judged for it. Jev is a closed commercial decision model from TypeSafe AI. Here, StartLux-Decision v1.1 27B Instant, a decision model with open weights, judges the same pairs again ([phase 1](docs/training-1-data.md#step-4-ask-the-teacher)).
 - Its development and test samples of OpenAlex strings. The `openalex_sample` config holds them, relabeled under the same annotation guidelines as the other labeled strings of the dataset.
 
 The design of this matcher is different in these ways:
@@ -82,11 +82,12 @@ The design of this matcher is different in these ways:
 |---|---|---|
 | Registry | OpenAlex institutions, each linked to a ROR record | ROR data release v2.14: all 143,284 active and inactive records. 3,215 of them have no OpenAlex institution |
 | Identifiers | OpenAlex institution IDs | ROR IDs |
-| Candidates | Four generators: lexical, dense search over name variants, similar strings in OpenAlex, and the stored top 5 of the 2023 model. About 18 for each string | A trained retriever over the full text of each ROR record (top 32), and the lexical generator over the names and acronyms of the ROR records (top 10). About 37 for each string |
+| Candidates | Four generators: lexical, dense search over name variants, similar strings in OpenAlex, and the stored top 5 of the 2023 model. About 18 for each string | A trained retriever over the full text of each ROR record (top 32), and the lexical generator over the names and acronyms of the ROR records (top 10). About 38 for each string |
 | Scoring | A pair scorer reads one string and one candidate at a time | A set model reads one string and all its candidates at a time |
 | Decision | A gradient-boosted chooser with 21 hand-made features, for example ROR parent and child links | The calibrated probability from the set model. There are no hand-made features |
+| Teacher | Jev, a closed commercial model. The pair scorer distills its judgments | StartLux-Decision v1.1 27B Instant, a model with open weights |
 | Training data | Teacher judgments for the pair scorer, and labeled samples for the chooser | Teacher judgments, synthetic strings in non-Latin scripts, and labeled strings |
-| Services | The similar-strings generator needs the OpenAlex search index, which is not public | All parts use public files |
+| Services | The similar-strings generator needs the OpenAlex search index, which is not public | All parts use public files. The teacher, the retriever and the set model have open weights |
 | Evaluation | Random OpenAlex strings and external sets | The same kinds of sets, and a split by institution. This split measures institutions that the training data does not contain |
 
 ## Results
@@ -103,32 +104,33 @@ The table compares these systems:
 |---|---:|---|---:|---:|---:|
 | `affiliations` | 1,947 | v3.0.0, local | 78.4 | 94.3 | 79.0 |
 |  |  | Baseline | 86.1 | 96.1 | 88.1 |
-|  |  | ror-set-point | 90.4 | 96.1 | 92.6 |
+|  |  | ror-set-point | 91.5 | 96.8 | 93.2 |
 | `affiliations_crossref` | 447 | v3.0.0, local | 85.9 | 96.7 | 88.6 |
 |  |  | Baseline | 91.7 | 97.9 | 93.9 |
-|  |  | ror-set-point | 91.9 | 97.3 | 94.3 |
+|  |  | ror-set-point | 94.0 | 98.3 | 95.5 |
 | `affiliations_openalex` | 751 | v3.0.0, local | 79.6 | 94.9 | 81.7 |
 |  |  | Baseline | 87.5 | 96.4 | 90.3 |
-|  |  | ror-set-point | 90.0 | 95.7 | 93.4 |
+|  |  | ror-set-point | 91.5 | 97.2 | 93.9 |
 | `affiliations_openalex_non_latin` | 749 | v3.0.0, local | 72.6 | 91.0 | 68.3 |
 |  |  | Baseline | 81.4 | 94.0 | 80.8 |
-|  |  | ror-set-point | 90.0 | 95.7 | 90.3 |
+|  |  | ror-set-point | 90.1 | 95.2 | 90.6 |
 | `affiliations_unseen_institutions` | 1,957 | v3.0.0, local | 77.0 | 95.9 | 80.0 |
 |  |  | Baseline | 79.2 | 93.6 | 85.1 |
-|  |  | ror-set-point | 84.7 | 94.6 | 87.4 |
+|  |  | ror-set-point | 85.0 | 95.8 | 88.0 |
 | `datacite` | 3,000 | v3.0.0, local | 92.4 | 97.7 | 93.2 |
 |  |  | Baseline | 91.9 | 95.1 | 95.6 |
-|  |  | ror-set-point | 93.1 | 97.8 | 94.4 |
+|  |  | ror-set-point | 93.3 | 98.1 | 94.5 |
 | `openalex_sample`, sample v1 | 20,000 | v3.0.0, local | 81.6 | 95.3 | 83.2 |
 |  |  | Baseline | 86.9 | 95.6 | 90.0 |
-|  |  | ror-set-point | 90.0 | 96.2 | 92.2 |
+|  |  | ror-set-point | 90.3 | 96.4 | 92.4 |
 | `openalex_sample`, sample v2 | 20,000 | v3.0.0, local | 82.6 | 94.9 | 84.2 |
 |  |  | Baseline | 88.0 | 95.2 | 91.5 |
-|  |  | ror-set-point | 90.3 | 95.7 | 93.3 |
+|  |  | ror-set-point | 91.3 | 96.1 | 94.0 |
 
-- On the 1,755 links of `affiliations_unseen_institutions` test to held-out institutions, recall is 90.0 for ror-set-point and 86.3 for the baseline. On the validation split, recall is 80.0 and 84.9. The cause is CNRS: ror-set-point often misses it when a string names it only with its acronym. Without the CNRS strings, recall is 87.4 and 83.5. No training row of the released models has a held-out institution as a positive.
-- On `affiliations` test, ror-set-point is right on 152 strings where the baseline is wrong. It is wrong on 68 strings where the baseline is right (exact McNemar p = 2 × 10⁻⁸). On `affiliations_unseen_institutions` test, the counts are 177 and 68 (p = 2 × 10⁻¹²).
-- No model, setting or training-data rule comes from the scores on a test split. The `affiliations_unseen_institutions` test split is a pass-or-fail check for the retriever and for the set model. `openalex_sample` test and `datacite` also have scores for information only, in addition to the final scores.
+- On the 1,755 links of `affiliations_unseen_institutions` test to held-out institutions, recall is 89.8 for ror-set-point and 86.3 for the baseline. On the validation split, recall is 84.8 and 84.9. The cause is CNRS: ror-set-point misses 36% of its links, often when a string names it only with its acronym. Without the CNRS strings, recall is 88.3 and 83.5. No training row of the released models has a held-out institution as a positive.
+- On `affiliations` test, ror-set-point is right on 157 strings where the baseline is wrong. It is wrong on 52 strings where the baseline is right (exact McNemar p = 2 × 10⁻¹³). On `affiliations_unseen_institutions` test, the counts are 179 and 64 (p = 9 × 10⁻¹⁴).
+- The variant pipeline that learns from Jev's judgments gets 90.4 on `affiliations` test and 84.7 on `affiliations_unseen_institutions` test ([docs/evaluation.md](docs/evaluation.md#teacher-variant)).
+- No model, setting or training-data rule comes from the scores on a test split. The `affiliations_unseen_institutions` and `affiliations` test splits are a pass-or-fail check for the retriever, the set model, the mention mask and the teacher. A change must not make the scores on them significantly worse. `openalex_sample` test and `datacite` also have scores for information only, in addition to the final scores.
 
 [docs/evaluation.md](docs/evaluation.md) gives more results and the procedure.
 
@@ -164,7 +166,7 @@ On a Linux CUDA GPU, install the `gpu` extra for fast inference:
 uv sync --extra gpu
 ```
 
-It adds flash-attn 2.7.4 (a prebuilt wheel for torch 2.6 and Python 3.12). The set model then puts the inputs of a batch one after the other with no padding, and runs flash-attention on each input. On 1 × NVIDIA H200 it answers 753 strings each second, 5.6 times as many as without the extra, with the same accuracy ([docs/inference.md](docs/inference.md#the-set-model-on-a-cuda-gpu)).
+It adds flash-attn 2.7.4 (a prebuilt wheel for torch 2.6 and Python 3.12). The set model then puts the inputs of a batch one after the other with no padding, and runs flash-attention on each input. On 1 × NVIDIA H200 it answers 741 strings each second, 5.6 times as many as without the extra, with the same accuracy ([docs/inference.md](docs/inference.md#the-set-model-on-a-cuda-gpu)).
 
 Run the unit tests with `uv run pytest`.
 
@@ -207,9 +209,9 @@ Training has four phases. Each phase reads the output of the phases before it. T
 
 | Phase | Document | Output | Compute for the released models |
 |---|---|---|---|
-| 1. Data | [docs/training-1-data.md](docs/training-1-data.md) | The records folder, `teacher_judgments`, `affiliations_unseen_institutions` | CPU, a few minutes |
+| 1. Data | [docs/training-1-data.md](docs/training-1-data.md) | The records folder, `affiliations_unseen_institutions`, `teacher_judgments` | CPU, a few minutes. The teacher: 32 jobs on 1 × NVIDIA H200 each, about 50 GPU hours |
 | 2. Synthetic strings | [docs/training-2-synthetic.md](docs/training-2-synthetic.md) | `synthetic_non_latin` | 816 calls to a language model, about 3.5 hours |
-| 3. Retriever | [docs/training-3-retriever.md](docs/training-3-retriever.md) | The retriever, and its top 64 records for each string | A first pass on 1 × NVIDIA L4 (1.8 hours), then 1 × NVIDIA H200 (17 minutes) |
+| 3. Retriever | [docs/training-3-retriever.md](docs/training-3-retriever.md) | The retriever, and its top 64 records for each string | 1 × NVIDIA H200, 30 minutes |
 | 4. Set model | [docs/training-4-set-model.md](docs/training-4-set-model.md) | The set model and its calibration | 1 × NVIDIA H200, 2.8 hours |
 
 ## Evaluation
@@ -220,11 +222,12 @@ Training has four phases. Each phase reads the output of the phases before it. T
 
 | Repository | Content |
 |---|---|
-| [ror-set-point-matching-train-validation-test](https://huggingface.co/datasets/adambuttrick/ror-set-point-matching-train-validation-test) (dataset) | Labeled strings, evaluation sets, teacher judgments, synthetic strings, and the ROR records with their two maps (`data/ror_records` is a records folder) |
+| [ror-set-point-matching-train-validation-test](https://huggingface.co/datasets/adambuttrick/ror-set-point-matching-train-validation-test) (dataset) | Labeled strings, evaluation sets, the StartLux teacher judgments, synthetic strings, and the ROR records with their two maps (`data/ror_records` is a records folder) |
+| [ror-set-point-matching-train-validation-test-openalex-jev-distill](https://huggingface.co/datasets/adambuttrick/ror-set-point-matching-train-validation-test-openalex-jev-distill) (dataset) | Jev's judgments of the same pairs, with ROR IDs |
 | [ror-set-point-retriever-e5-base](https://huggingface.co/adambuttrick/ror-set-point-retriever-e5-base) | The retriever |
 | [ror-set-point-set-model-mmbert-base-mask](https://huggingface.co/adambuttrick/ror-set-point-set-model-mmbert-base-mask) | The set model |
 | [ror-set-point-pair-scorer-baseline](https://huggingface.co/adambuttrick/ror-set-point-pair-scorer-baseline) | The baseline |
-| Variants | `ror-set-point-retriever-e5-base-no-synthetic`, `ror-set-point-retriever-embeddinggemma-300m`, `ror-set-point-set-model-mmbert-base` (the set model without the mention mask), `ror-set-point-set-model-bge-reranker-v2-m3`, `ror-set-point-set-model-embeddinggemma-300m` |
+| Variants | `ror-set-point-retriever-e5-base-openalex-jev-distill` and `ror-set-point-set-model-mmbert-base-openalex-jev-distill`: the pipeline with Jev's judgments ([docs/evaluation.md](docs/evaluation.md#teacher-variant)). The [collection](https://huggingface.co/collections/adambuttrick/ror-set-point-matching-6ada8733c9e6fb018f382d0b) also holds other variants that learn from Jev's judgments |
 
 Each model repository contains its training folder (`training_data/`), in the format that the training scripts read and write, and its outputs on the evaluation splits.
 
@@ -235,5 +238,6 @@ Each model repository contains its training folder (`training_data/`), in the fo
 | `src/ror_set_point/inference/lexical.py` | MIT, from openalex-affiliation-matcher (the notice is in the file) |
 | ROR records | CC0 |
 | OpenAlex strings and institutions | CC0 |
+| Teacher judgments | CC0. They come from StartLux-Decision v1.1 27B Instant by StartLux Labs. Its weights (CC BY-NC 4.0) are not part of this project |
 | Retriever weights | MIT, from multilingual-e5-base |
 | Set model weights | MIT, from mmBERT-base |

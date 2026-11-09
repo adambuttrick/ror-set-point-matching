@@ -96,19 +96,19 @@ Use the parts apart for other tasks:
 
 ## Speed and memory
 
-The measurements in this section and in [Notes](#notes) use [ror-set-point-set-model-mmbert-base](https://huggingface.co/adambuttrick/ror-set-point-set-model-mmbert-base), the set model without the mention mask. It has the same architecture, size and input limits as the released set model. Thus the times and the memory are the same. The scores in the tables are the scores of that model.
+The measurements in this section use the released retriever and set model (9 November 2026).
 
-| Part | Apple M4 | NVIDIA H200 |
+| Part | CPU only (`cpu-upgrade` job: 8 vCPU, AMD EPYC 7R13) | NVIDIA H200 |
 |---|---|---|
-| Lexical index (CPU) | 2.4 seconds to load. About 2,200 strings each second in one process. About 23 milliseconds for each string without the screen | 5.3 seconds to load. 1,014 strings each second in one process, 12,195 with `--workers 16` |
-| Retriever, all 143,284 record texts | About 25 minutes on the GPU (`--device mps`) | Less than 1 minute |
-| Set model | About 1.3 seconds for each string on the CPU | 753 strings each second, with the `gpu` extra |
+| Lexical index | 13 seconds to load. About 450 strings each second in one process | 5.3 seconds to load. 1,014 strings each second in one process, 12,195 with `--workers 16` |
+| Retriever, all 143,284 record texts | About 4 hours (10 record texts each second) | Less than 1 minute |
+| Set model | About 10.6 seconds for each string | 741 strings each second, with the `gpu` extra |
 
-The Apple M4 figures for the lexical index are for the 3,861 strings of the two validation splits. The H200 figures for the lexical index are for the 46,904 strings of the four test splits.
+The CPU figures come from a Hugging Face Job. The lexical index read the 3,861 strings of the two validation splits, and the set model read 192 strings of `affiliations` validation. The retriever time comes from 5,000 record texts. The H200 figures for the lexical index are for the 46,904 strings of the four test splits. On a CPU, the set model is too slow for large files. Use a GPU for them.
 
 Use `--record-vectors`, so that the record texts are encoded only one time. On a CUDA GPU, the retriever runs in fp16 and the set model in bf16. On other devices, both run in fp32. `--device` selects the device (for example `cpu`, `cuda` or `mps`).
 
-On 1 × NVIDIA H200, `match run --workers 16` answered the 40,000 strings of `openalex_sample` test in 95 seconds, with loading. With one process for the lexical index (the default, `--workers 1`), it took 130 seconds. For the 46,904 strings of the four test splits, the set model took 64 seconds and the retriever 4.5 seconds. The lexical index took 3.8 seconds with 16 processes. Use `--workers` on a machine with many CPU cores.
+On 1 × NVIDIA H200, `match run --workers 16` answered the 40,000 strings of `openalex_sample` test in 106 seconds, with loading. With one process for the lexical index (the default, `--workers 1`), it took 147 seconds. For the 46,904 strings of the four test splits, the set model took 65 seconds and the retriever 4.5 seconds. The lexical index took 4.6 seconds with 16 processes. Use `--workers` on a machine with many CPU cores.
 
 ### Chunks
 
@@ -117,23 +117,23 @@ These runs used `match run --workers 16` on 1 × NVIDIA H200. The input was the 
 - the 267,105 distinct strings of the labeled splits and the teacher judgments (102 characters on average);
 - the 133,636 strings of `synthetic_non_latin` (32 characters on average).
 
-The dataset has no other distinct strings. The speed is for the chunks after the first one. The first chunk also compiles the set model, and takes 2 to 4 seconds more.
+The dataset has no other distinct strings. The speed is for the chunks after the first one. The first chunk also compiles the set model, and takes about 1 second more.
 
 | `--chunk-size` | Strings | Seconds for each chunk | Strings each second | GPU memory | Memory of all processes |
 |---:|---|---|---|---:|---:|
-| 10,000 | The first 100,000 | 15.9 | 630 | 3.4 GB | 9.0 GB |
-| 50,000 | 400,741 | 79.5 (labeled), 65.0 (synthetic) | 629 (labeled), 770 (synthetic) | 3.8 GB | 9.3 GB |
-| 400,741 | 400,741 | 592 (one chunk) | 677 (all) | 3.8 GB | 12.2 GB |
+| 10,000 | The first 100,000 | 16.3 | 612 | 3.5 GB | 7.7 GB |
+| 50,000 | 400,741 | 80.9 (labeled), 63.7 (synthetic) | 618 (labeled), 786 (synthetic) | 3.5 GB | 8.3 GB |
+| 400,741 | 400,741 | 601 (one chunk) | 667 (all) | 3.5 GB | 11.3 GB |
 
-The GPU memory is the peak of `torch.cuda.max_memory_allocated` (nvidia-smi showed 7.9 GB at most). The memory of all processes is the peak of the total PSS of the main process and the 16 lexical processes, taken every 3 seconds. The main process alone used 3.5 GB with chunks of 50,000 rows, and 6.7 GB with one chunk of 400,741 rows. Thus each 100,000 rows of a chunk add about 0.9 GB. Loading took 24 seconds with `--record-vectors`, and 47 seconds when the record vectors were encoded.
+The GPU memory is the peak of `torch.cuda.max_memory_allocated` (nvidia-smi showed 7.0 GB at most). The memory of all processes is the peak of the total PSS of the main process and the 16 lexical processes, taken every 3 seconds. The main process alone used 2.9 GB with chunks of 50,000 rows, and 5.4 GB with one chunk of 400,741 rows. Thus each 100,000 rows of a chunk add about 0.7 GB. Loading took 27 seconds with `--record-vectors`, and 39 seconds when the record vectors were encoded.
 
 The size of the chunk does not change the speed from 10,000 rows. A large chunk uses more memory, and loses more work when a run stops. A chunk of 100,000 labeled strings (the default) takes about 2.7 minutes.
 
-At 629 strings each second, 100 million distinct strings take about 44 hours on 1 × H200. On a machine with 8 GPUs (h200x8 has 184 vCPU), split the input into 8 files. Run one `match` for each file, with its own GPU (`CUDA_VISIBLE_DEVICES`) and its own `--out`. This should take about 5.5 hours (not measured). On Hugging Face Jobs, `jobs/match.sh` does these steps on all the GPUs of the job ([jobs.md](jobs.md#several-gpus)).
+At 618 strings each second, 100 million distinct strings take about 45 hours on 1 × H200. On a machine with 8 GPUs (h200x8 has 184 vCPU), split the input into 8 files. Run one `match` for each file, with its own GPU (`CUDA_VISIBLE_DEVICES`) and its own `--out`. This should take about 5.6 hours (not measured). On Hugging Face Jobs, `jobs/match.sh` does these steps on all the GPUs of the job ([jobs.md](jobs.md#several-gpus)).
 
-The answers do not depend on the chunks, to within the noise of the GPU. On `openalex_sample` test, chunks of 7,000 rows and one chunk gave the same `ror_ids` for all 40,000 strings. The exact match, precision and recall were the same (90.1 / 95.9 / 92.7), and one or two values of `p` differed by 0.0001. On the 400,741 strings, chunks of 50,000 rows and one chunk gave the same `ror_ids` for each string. Only 13 values of `p` differed, by 0.0001. Two runs with the same chunks can also differ in this way, because the GPU does not always add numbers in the same order.
+The answers do not depend on the chunks, to within the noise of the GPU. On `openalex_sample` test, chunks of 7,000 rows and one chunk gave the same `ror_ids` for all 40,000 strings. The exact match, precision and recall were the same (90.8 / 96.3 / 93.2), and two values of `p` differed by 0.0001. On the 400,741 strings, chunks of 50,000 rows and one chunk gave the same `ror_ids` for each string. Only 20 values of `p` differed, by 0.0001. Two runs with the same chunks can also differ in this way, because the GPU does not always add numbers in the same order.
 
-With chunks of 7,000 rows, `--resume` gave the same file as a run that did not stop. This was true after `kill -9` in the third chunk, and after a cut in the middle of a row. An input with each of the 40,000 strings two times took 66 seconds, against 65 seconds for each string one time. The set model did 40,000 strings, and each copy got the answer of the first row with its string.
+With chunks of 7,000 rows, `--resume` after a cut in the middle of a row gave the same file as a run that did not stop. After `kill -9` in the third chunk, `--resume` gave the same `ror_ids` for each row. One value of `p`, in a row from before the stop, differed by 0.0001, as between any two runs. An input with each of the 40,000 strings two times took 68 seconds for its chunk, against 70 seconds for each string one time. The set model did 40,000 strings, and each copy got the answer of the first row with its string.
 
 ### The lexical index
 
@@ -175,36 +175,36 @@ Install the `gpu` extra (`uv sync --extra gpu`, Linux and Python 3.12). It adds 
 4. The CPU makes the next batch while the GPU runs the current batch. One CPU core makes batches for about 120,000 strings each second.
 5. torch.compile fuses the norms and the feed-forward blocks. The first batch takes a few seconds more. Use `--no-compile` to turn it off.
 
-Without flash-attn, the set model runs in padded batches of `--batch-size` strings, in bf16 with bf16 autocast. The bge-reranker and EmbeddingGemma variants also run in this way, because their encoders are not ModernBERT.
+Without flash-attn, the set model runs in padded batches of `--batch-size` strings, in bf16 with bf16 autocast. A set model with an encoder that is not ModernBERT also runs in this way.
 
-The speed on 1 × NVIDIA H200, for the 40,000 strings of `openalex_sample` test and their candidates. Each input has 1,524 tokens on average, and 0.40 TFLOP of useful work (the matrix products, and attention in each input). The bf16 peak of the H200 is 989 TFLOP/s. The time is from the strings and the candidate IDs to the scores, after a first batch.
+The speed on 1 × NVIDIA H200, for the 40,000 strings of `openalex_sample` test and their candidates. Each input has 1,547 tokens on average, and 0.41 TFLOP of useful work (the matrix products, and attention in each input). The bf16 peak of the H200 is 989 TFLOP/s. The time is from the strings and the candidate IDs to the scores, after a first batch.
 
 | Way | Strings each second | TFLOP/s | Share of the peak |
 |---|---:|---:|---:|
-| Padded batches of 32 strings: fp32 weights, bf16 autocast, SDPA attention (`bench --reference`) | 134 | 54 | 5.5% |
-| Packed, bf16 | 665 | 268 | 27% |
-| Packed, bf16, torch.compile (the default) | 753 | 304 | 31% |
+| Padded batches of 32 strings: fp32 weights, bf16 autocast, SDPA attention (`bench --reference`) | 132 | 54 | 5.5% |
+| Packed, bf16 | 663 | 272 | 27% |
+| Packed, bf16, torch.compile (the default) | 741 | 304 | 31% |
 
 The padded way is slower for these reasons:
 
-- On these strings, padding gives the batches 1.45 times more tokens than the inputs.
+- On these strings, padding gives the batches 1.38 times more tokens than the inputs.
 - SDPA attention reads the whole input in all 22 layers, with a mask.
 - Python makes the batches, one token list at a time.
 
 Batch sizes of 32,768 to 262,144 tokens change the packed speed by less than 3%.
 
-In the packed way, the matrix products take 37% of the GPU time, at about 740 TFLOP/s. Attention takes 34%. The global layers run near the limit of flash-attention 2, and the window layers are less efficient. Norms, the rotary embedding and the other element-wise work take 29%, near the limit of the GPU memory bandwidth.
+In the packed way, the matrix products take 37% of the GPU time, at about 720 TFLOP/s. Attention takes 33%. The global layers run near the limit of flash-attention 2, and the window layers are less efficient. Norms, the rotary embedding and the other element-wise work take 30%, near the limit of the GPU memory bandwidth.
 
-The packed way gives the same answers as the padded way, to within the noise of bf16. The scores differ by 0.026 on average (the padded way gives the head's output in bf16). On `openalex_sample` test, 58 of the 40,000 answers change. Against the gold links, with the published candidates:
+The packed way gives the same answers as the padded way, to within the noise of bf16. The scores differ by 0.026 on average (the padded way gives the head's output in bf16). On `openalex_sample` test, 75 of the 40,000 answers change. Against the gold links, with the published candidates:
 
 | Test split | Strings | Padded | Packed (published) | Only padded right | Only packed right |
 |---|---:|---|---|---:|---:|
-| `affiliations` | 1,947 | 90.0 / 95.8 / 92.5 | 90.0 / 95.7 / 92.6 | 1 | 1 |
-| `affiliations_unseen_institutions` | 1,957 | 83.6 / 94.6 / 86.8 | 83.6 / 94.6 / 86.9 | 2 | 3 |
-| `datacite` | 3,000 | 93.5 / 98.0 / 94.4 | 93.5 / 98.0 / 94.5 | 1 | 2 |
-| `openalex_sample` | 40,000 | 90.1 / 95.9 / 92.7 | 90.1 / 95.9 / 92.7 | 20 | 25 |
+| `affiliations` | 1,947 | 91.4 / 96.8 / 93.2 | 91.5 / 96.8 / 93.2 | 0 | 3 |
+| `affiliations_unseen_institutions` | 1,957 | 84.9 / 95.7 / 88.0 | 85.0 / 95.8 / 88.0 | 3 | 5 |
+| `datacite` | 3,000 | 93.3 / 98.1 / 94.5 | 93.3 / 98.1 / 94.5 | 1 | 1 |
+| `openalex_sample` | 40,000 | 90.8 / 96.3 / 93.2 | 90.8 / 96.3 / 93.2 | 29 | 27 |
 
-The values are exact match / precision / recall, in percent. No difference is significant (exact McNemar test, p ≥ 0.5).
+The values are exact match / precision / recall, in percent. No difference is significant (exact McNemar test, p ≥ 0.25).
 
 To measure the speed, and to compare the scores with the padded way:
 
@@ -215,9 +215,9 @@ uv run python -m ror_set_point.inference.bench --set-model adambuttrick/ror-set-
 
 `--input` holds candidate rows (`match candidates`, or `evaluation/candidates/<set>.jsonl.gz` of the set model's repository).
 
-The retriever's scores in fp32 and in fp16 or bf16 differ by about 0.002. Thus records near rank 32 can change places, but recall does not change. On `affiliations` validation, the released search (bf16) holds 98.7% of gold links in the top 32, and an fp32 search holds 98.8%. With the released models, `match run` gave the published answer for each of the first 60 strings of `affiliations` validation.
+The retriever's scores in fp32 and in fp16 differ by 0.0005 on average, and by 0.004 at most. Thus records near rank 32 can change places: the top 32 differ for 22% of the strings of `affiliations` validation. But recall does not change: the fp16 search and an fp32 search both hold 98.7% of gold links in the top 32. On the first 60 strings of `affiliations` validation, `match run` gave the published answer for 58 strings. In the other 2, a candidate with p = 0.55 in the published answers was below 0.5.
 
 ## Notes
 
-- transformers can show a warning about an "incorrect regex pattern" when it loads the set model's tokenizer. Ignore it. The saved tokenizer gives the same tokens as the tokenizer of mmBERT-base (checked on 7,947 strings and record texts). Do not set `fix_mistral_regex=True`, because that can change the tokens.
+- transformers can show a warning about an "incorrect regex pattern" when it loads the set model's tokenizer. Ignore it. The saved tokenizer gives the same tokens as the tokenizer of mmBERT-base (checked on 3,861 strings and 20,000 record texts). Do not set `fix_mistral_regex=True`, because that can change the tokens.
 - The answers of the released set model on the evaluation splits are in its repository (`evaluation/predictions/<set>.jsonl`). The candidate lists of the answers on the four test splits are in `evaluation/candidates/<set>.jsonl.gz`. The candidate lists of the answers on the two validation splits are in `training_data/eval.jsonl.gz`. To get the same answers again, give these candidates to `match answer` in the order of the file. From `eval.jsonl.gz`, give the rows as `{id: k, text: s, candidates: c}`.

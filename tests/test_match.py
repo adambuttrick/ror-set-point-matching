@@ -1,12 +1,15 @@
 import contextlib
+import copy
 import json
 import sys
 import zlib
 
 import pytest
+import torch
 
 from ror_set_point.inference import match, set_model
 from ror_set_point.inference.match import Matcher, chunks, complete_rows, order, unique
+from ror_set_point.inference.retriever import weights_sha256
 
 
 def h(*parts):
@@ -157,3 +160,13 @@ def test_complete_rows_cuts_a_partial_line(tmp_path):
     assert complete_rows(str(p)) == 0
     p.write_bytes(b'{"a": 1}\n{"a": 2}\n{"a"')
     assert complete_rows(str(p)) == 2 and p.read_bytes() == b'{"a": 1}\n{"a": 2}\n'
+
+
+def test_weights_sha256_changes_with_the_weights_and_not_with_the_precision():
+    torch.manual_seed(0)
+    half = torch.nn.Sequential(torch.nn.Linear(4, 4), torch.nn.LayerNorm(4)).half()
+    other = copy.deepcopy(half).float()
+    assert weights_sha256(half) == weights_sha256(other)
+    with torch.no_grad():
+        other[1].bias += 0.5
+    assert weights_sha256(half) != weights_sha256(other)

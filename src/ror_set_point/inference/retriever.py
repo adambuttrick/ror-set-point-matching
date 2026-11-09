@@ -14,6 +14,7 @@ Without --queries, the command only encodes the record texts into --record-vecto
         --records records --record-vectors record_vectors.pt
 """
 import argparse
+import hashlib
 import os
 import sys
 import time
@@ -34,6 +35,15 @@ def load_model(name_or_path, device):
     return m.eval()
 
 
+def weights_sha256(model):
+    """The sha256 of the last 4 weight tensors of the model, in fp32. It changes when the weights change, also when
+    the model name stays the same. It is the same on each device."""
+    h = hashlib.sha256()
+    for p in list(model.parameters())[-4:]:
+        h.update(p.detach().float().cpu().numpy().tobytes())
+    return h.hexdigest()
+
+
 def encode(model, texts, prompt_name, max_length, batch_size):
     """Unit vectors for texts, as a tensor on the model's device."""
     model.max_seq_length = max_length
@@ -46,15 +56,16 @@ class Retriever:
     def __init__(self, model, records_dir, device=None, batch_size=256, record_length=128, query_length=512,
                  vectors_path=None):
         """model: a model name or folder, or a loaded SentenceTransformer. vectors_path: a file that keeps the
-        record vectors between runs (written when it does not exist)."""
+        record vectors between runs. It is written again when the model name, the weights, the records file or the
+        record length are different."""
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.model = load_model(model, self.device) if isinstance(model, str) else model
         self.batch_size, self.query_length = batch_size, query_length
         rows = list(read_records(records_dir))
         self.ids = [r["ror_id"] for r in rows]
         self.index = {x: j for j, x in enumerate(self.ids)}
-        key = {"model": model if isinstance(model, str) else None, "records": sha256(records_file(records_dir)),
-               "record_length": record_length}
+        key = {"model": model if isinstance(model, str) else None, "weights": weights_sha256(self.model),
+               "records": sha256(records_file(records_dir)), "record_length": record_length}
         saved = torch.load(vectors_path, map_location="cpu") if vectors_path and os.path.exists(vectors_path) else None
         if saved and saved["key"] == key:
             self.vectors = saved["vectors"].to(self.device)

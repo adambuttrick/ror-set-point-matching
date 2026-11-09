@@ -3,7 +3,7 @@
 #
 #   jobs/submit.sh STEP [OPTIONS OF hf jobs run]
 #
-# STEP is ror_data, index, match, evaluate, pipeline or verify (a script in jobs/). The options go to hf jobs run,
+# STEP is ror_data, index, match, evaluate, pipeline, verify or relabel (a script in jobs/). The options go to hf jobs run,
 # for example --flavor h200 --timeout 2h --detach -e INPUT=... . This script adds:
 #
 #   -v <a copy of the code>:/code          src, jobs, pyproject.toml, uv.lock, README.md and .python-version
@@ -13,7 +13,8 @@
 #
 # Environment: BUCKET (default adambuttrick/ror-set-point-matching-jobs), DATASET
 # (default adambuttrick/ror-set-point-matching-train-validation-test), IMAGE (default
-# ghcr.io/astral-sh/uv:0.12.1-python3.12-trixie).
+# ghcr.io/astral-sh/uv:0.12.1-python3.12-trixie). SHARDS=N submits N jobs, one for each shard, with -e SHARD=i
+# -e SHARDS=N (for relabel). Then the options must include --detach.
 set -euo pipefail
 
 step=${1:?usage: jobs/submit.sh STEP [OPTIONS OF hf jobs run]}
@@ -31,6 +32,20 @@ code=$stage/ror-set-point-matching
 mkdir "$code"
 tar -C "$root" --exclude __pycache__ -cf - src jobs pyproject.toml uv.lock README.md .python-version | tar -C "$code" -xf -
 
-hf jobs run --name "ror-$step" --label "step=$step" --secrets HF_TOKEN \
-    -v "$code:/code" -v "hf://buckets/$BUCKET:/bucket" -v "hf://datasets/$DATASET:/dataset" \
-    "$@" "$IMAGE" bash "/code/jobs/$step.sh"
+submit() {  # NAME [OPTIONS OF hf jobs run]
+    local name=$1
+    shift
+    hf jobs run --name "$name" --label "step=$step" --secrets HF_TOKEN \
+        -v "$code:/code" -v "hf://buckets/$BUCKET:/bucket" -v "hf://datasets/$DATASET:/dataset" \
+        "$@" "$IMAGE" bash "/code/jobs/$step.sh"
+}
+
+if [ -z "${SHARDS:-}" ]; then
+    submit "ror-$step" "$@"
+    exit
+fi
+[[ " $* " == *" --detach "* ]] || { echo "SHARDS needs --detach" >&2; exit 2; }
+for ((i = 0; i < SHARDS; i++)); do
+    echo "shard $i of $SHARDS" >&2
+    submit "ror-$step-$i" -e "SHARD=$i" -e "SHARDS=$SHARDS" "$@"
+done
