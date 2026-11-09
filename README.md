@@ -222,8 +222,8 @@ Training has four phases. Each phase reads the output of the phases before it. T
 
 | Repository | Content |
 |---|---|
-| [ror-set-point-matching-train-validation-test](https://huggingface.co/datasets/adambuttrick/ror-set-point-matching-train-validation-test) (dataset) | Labeled strings, evaluation sets, the StartLux teacher judgments, synthetic strings, and the ROR records with their two maps (`data/ror_records` is a records folder) |
-| [ror-set-point-matching-train-validation-test-openalex-jev-distill](https://huggingface.co/datasets/adambuttrick/ror-set-point-matching-train-validation-test-openalex-jev-distill) (dataset) | Jev's judgments of the same pairs, with ROR IDs |
+| [ror-set-point-matching-train-validation-test](https://huggingface.co/datasets/adambuttrick/ror-set-point-matching-train-validation-test) (dataset) | Labeled strings, evaluation sets, the StartLux teacher judgments (`teacher_judgments`), synthetic strings, and the ROR records with their two maps (`data/ror_records` is a records folder) |
+| [ror-set-point-matching-train-validation-test-openalex-jev-distill](https://huggingface.co/datasets/adambuttrick/ror-set-point-matching-train-validation-test-openalex-jev-distill) (dataset) | `teacher_judgments` with Jev's judgments instead of the StartLux judgments: the same pairs, with ROR IDs |
 | [ror-set-point-retriever-e5-base](https://huggingface.co/adambuttrick/ror-set-point-retriever-e5-base) | The retriever |
 | [ror-set-point-set-model-mmbert-base-mask](https://huggingface.co/adambuttrick/ror-set-point-set-model-mmbert-base-mask) | The set model |
 | [ror-set-point-pair-scorer-baseline](https://huggingface.co/adambuttrick/ror-set-point-pair-scorer-baseline) | The baseline |
