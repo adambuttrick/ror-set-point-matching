@@ -167,7 +167,7 @@ Each variant has its own model repository. The table gives the recall of the top
 | Released (`ror-set-point-retriever-e5-base`) |  | 96.9 | 94.7 | 97.5 | 98.3 | 99.0 | 98.7 |
 | Jev teacher (`-openalex-jev-distill`) | Jev's judgments (see below) | 96.3 | 93.7 | 97.2 | 97.9 | 98.7 | 98.6 |
 
-The Jev variant learns from Jev's judgments: the `teacher_judgments` config of the `-openalex-jev-distill` dataset ([phase 1](training-1-data.md)). Its rows differ from the rows that this code makes from that config in these ways:
+The Jev variant learns from the judgments of Jev, the teacher of openalex-affiliation-matcher v3.0.0: the `teacher_judgments` config of the variant dataset `-openalex-jev-distill` ([phase 1](training-1-data.md#check-the-result)). Its rows differ from the rows that this code makes from that config in these ways:
 
 - The hard negatives of the labeled strings are the candidates of the baseline matcher (its lexical, dense, acronym and alias generators). Give such candidates to `build` with `--labelled-negatives` (rows `{id, ror_ids}`).
 - The rows contain 8 strings (4 labeled and 4 synthetic) that are equal to `affiliations` validation strings. This code removes them.
@@ -177,8 +177,8 @@ With the same candidates and negatives, `build` makes the rows of the Jev varian
 
 ## Files of the released models
 
-The repositories of the released retriever and of the Jev variant each hold the training folder (`training_data/`), as `build` writes it. `train` reads this folder as it is. Each repository also holds a search output (`search/topk.jsonl.gz`) in the format that `train` writes. It covers every query, with 64 records for each. Phase 4 reads it with `--retrieved`.
+The repository of the released retriever holds the training folder (`training_data/`), as `build` writes it. `train` reads this folder as it is. The repository also holds a search output (`search/topk.jsonl.gz`) in the format that `train` writes. It covers every query, with 64 records for each. Phase 4 reads it with `--retrieved`.
 
-The query sets have the names `teacher`, `labelled`, `synthetic`, `unseen_validation`, `unseen_test` and `affiliations_validation`. `search/topk_test_splits.jsonl.gz` of `ror-set-point-retriever-e5-base` and of `-openalex-jev-distill` holds the test splits `affiliations_test`, `unseen_test`, `datacite_test` and `openalex_sample_test`, with 64 records for each string.
+The query sets have the names `teacher`, `labelled`, `synthetic`, `unseen_validation`, `unseen_test` and `affiliations_validation`. `search/topk_test_splits.jsonl.gz` holds the test splits `affiliations_test`, `unseen_test`, `datacite_test` and `openalex_sample_test`, with 64 records for each string. The repository of the Jev variant holds the same files.
 
 The training folders of the released retriever come from steps 1 to 6, with the outputs of phases 1 and 2 in the dataset. Steps 2, 3 and 6 run on a GPU. Thus another run can give slightly different negatives in step 4, and a slightly different model.

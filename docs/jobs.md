@@ -171,7 +171,7 @@ With `SHARDS=N`, `submit.sh` starts N jobs, and gives `-e SHARD=i -e SHARDS=N` t
 | Variable | Default | Content |
 |---|---|---|
 | `SHARD`, `SHARDS` | | The shard of the job, from 0 to `SHARDS` - 1 |
-| `TEACHER` | `/dataset/data/teacher_judgments` | A `teacher_judgments` folder. The pairs are its judgments. The pairs of this config are the pairs of Jev's config, in the same order |
+| `TEACHER` | `/dataset/data/teacher_judgments` | A `teacher_judgments` folder. The pairs are its judgments. The pairs of this config are the pairs of [phase 1, step 2](training-1-data.md#step-2-make-the-teacher-pairs), in the same order |
 | `STAGE2` | | Stage 2 rows of the set model. The pairs are their candidates, with labels and folds. They replace `TEACHER` |
 | `OUT` | `/bucket/runs/relabel/teacher`, or `/bucket/runs/relabel/stage2` with `STAGE2` | The folder of the run |
 | `QUESTION` | `questions/v1.2.txt` of the code | The question |

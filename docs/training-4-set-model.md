@@ -172,26 +172,9 @@ Each set-model repository holds the training folder (`training_data/`), which `t
 
 All times are on 1 × NVIDIA H200.
 
-### With the StartLux and Jev teachers
+The Jev variant learns from the judgments of Jev, the teacher of openalex-affiliation-matcher v3.0.0, in phases 3 and 4. Its candidates come from the Jev retriever of [phase 3](training-3-retriever.md#variants). The lexical candidates of its stage 2 rows come from an index that reads the institutions file of openalex-affiliation-matcher v3.0.0 and adds a bonus for the works count. The other settings are the same as for the released model.
 
-The Jev variant (`-openalex-jev-distill`) learns from Jev's judgments in phases 3 and 4. Its candidates come from the Jev retriever of [phase 3](training-3-retriever.md#variants). The lexical candidates of its stage 2 rows come from an index that reads the institutions file of openalex-affiliation-matcher v3.0.0 and adds a bonus for the works count. The other settings are the same as for the released model.
-
-Exact match in percent on the validation splits, for 4 seeds of each pipeline. All 8 answer files come from `match run`, with the current lexical index and the retriever of each pipeline.
-
-| Seed | `affiliations_unseen_institutions` validation: Jev / StartLux | `affiliations` validation: Jev / StartLux |
-|---|---:|---:|
-| 1363 | 74.7 / 80.0 | 91.4 / 91.8 |
-| 2718 | 76.9 / 81.1 | 91.2 / 90.9 |
-| 4242 | 75.7 / 81.7 | 91.5 / 91.8 |
-| 8128 | 75.1 / 81.3 | 90.2 / 91.8 |
-| Mean | 75.6 / 81.0 | 91.1 / 91.6 |
-
-- On the `affiliations_unseen_institutions` validation split, the StartLux pipeline is better at each seed (exact McNemar p < 10⁻⁸). The mean gain is 5.4 points. Without the CNRS strings, it is 1.9 points. The recall of the links to CNRS is 35 to 45% with Jev and 68 to 81% with StartLux.
-- On the `affiliations` validation split, the mean gain is 0.5 points. Only the gain of seed 8128 is significant (p = 0.003).
-- Precision is higher with StartLux: by 1.0 point on the `affiliations_unseen_institutions` validation split and by 0.1 points on the `affiliations` validation split (means).
-- The seed of the training run also changes the results. Between the seeds of one pipeline, exact match on the `affiliations_unseen_institutions` validation split changes by up to 2.2 points. On the `affiliations` validation split, it changes by up to 1.3 points.
-
-[evaluation.md](evaluation.md#teacher-variant) gives the test splits.
+Over 4 seeds, with answers from `match run`, the mean exact match of the Jev variant is 75.6 on the `affiliations_unseen_institutions` validation split and 91.1 on the `affiliations` validation split. With the same seeds, the procedure of the released model gets 81.0 and 91.6. The repository of the variant holds its answers on the test splits.
 
 ## Limitations
 
