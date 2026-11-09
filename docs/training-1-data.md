@@ -125,7 +125,7 @@ The largest group (399 strings) holds every string that names CNRS (`https://ror
 
 `ror_set_point.training.data.relabel` asks the teacher one question about each pair: does the string name the organization on the card? The answer is a probability. The steps of the module need only the standard library. The server of the teacher needs a GPU.
 
-The card of a pair has the fields that openalex-affiliation-matcher v3.0.0 gave Jev. These are the ROR display name, up to 6 other names (labels, then aliases) and up to 4 acronyms. They also include the first type, and the city and country of the first place. The question (`questions/v1.2.txt`) follows the annotation guidelines v1.2 of the dataset. For example, a parent organization counts only when the string names it. `questions/jev.txt` is the question that openalex-affiliation-matcher v3.0.0 asked Jev.
+The card of a pair has the fields that openalex-affiliation-matcher v3.0.0 gave Jev. These are the ROR display name, up to 6 other names (labels, then aliases) and up to 4 acronyms. They also include the first type, and the city and country of the first place. The question (`questions/v1.2.txt`) follows the annotation guidelines v1.2 of the dataset. For example, a parent organization counts only when the string names it. The comparisons below also use Jev's question: the question that openalex-affiliation-matcher v3.0.0 asked Jev (`NAMES_IT` in [`matcher/training/jev_teacher.py`](https://github.com/ourresearch/openalex-affiliation-matcher/blob/v3.0.0/matcher/training/jev_teacher.py)).
 
 The step has four parts:
 

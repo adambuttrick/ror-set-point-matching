@@ -28,8 +28,7 @@ The card has the fields that openalex-affiliation-matcher v3.0.0 gave its teache
 display name, up to 6 other names (labels, then aliases), up to 4 acronyms (sorted), the first type, and the city and
 country of the first place. The answer to a question of type "noul" is a probability.
 
-The folder questions/ holds two questions. v1.2.txt made the teacher_judgments config of the dataset. jev.txt is the
-question of openalex-affiliation-matcher v3.0.0 (jev_teacher.NAMES_IT), for reference.
+questions/v1.2.txt is the question that made the teacher_judgments config of the dataset.
 
 The steps use only the standard library.
 """
