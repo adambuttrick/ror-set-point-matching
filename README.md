@@ -73,7 +73,7 @@ The name comes from two parts of the matcher. The set model reads the candidates
 
 - The lexical candidate generator. `src/ror_set_point/inference/lexical.py` adapts its code (MIT license). Here it reads the ROR records, and it has no bonus for the works count of an institution.
 - Its institutions file (`models/institutions.jsonl.gz`). It maps OpenAlex institution IDs to ROR IDs, for the teacher judgments and for answers with OpenAlex institution IDs.
-- Its teacher pairs: the 3.8 million (string, institution) pairs that Jev judged for it. Jev is a closed commercial decision model from TypeSafe AI. Here, StartLux-Decision v1.1 27B Instant, a decision model with open weights, judges the same pairs again ([phase 1](docs/training-1-data.md#step-4-ask-the-teacher)).
+- Its teacher pairs: the 3.8 million (string, institution) pairs that Jev judged for it. Jev is a closed commercial decision model from TypeSafe AI. Here, [StartLux-Decision v1.1 27B Instant](https://huggingface.co/startlux-models/StartLux-Decision-v1.1-27B-Instant), a decision model with open weights, judges the same pairs again ([phase 1](docs/training-1-data.md#step-4-ask-the-teacher)).
 - Its development and test samples of OpenAlex strings. The `openalex_sample` config holds them, relabeled under the same annotation guidelines as the other labeled strings of the dataset.
 
 The design of this matcher is different in these ways:
@@ -85,7 +85,7 @@ The design of this matcher is different in these ways:
 | Candidates | Four generators: lexical, dense search over name variants, similar strings in OpenAlex, and the stored top 5 of the 2023 model. About 18 for each string | A trained retriever over the full text of each ROR record (top 32), and the lexical generator over the names and acronyms of the ROR records (top 10). About 38 for each string |
 | Scoring | A pair scorer reads one string and one candidate at a time | A set model reads one string and all its candidates at a time |
 | Decision | A gradient-boosted chooser with 21 hand-made features, for example ROR parent and child links | The calibrated probability from the set model. There are no hand-made features |
-| Teacher | Jev, a closed commercial model. The pair scorer distills its judgments | StartLux-Decision v1.1 27B Instant, a model with open weights |
+| Teacher | Jev, a closed commercial model. The pair scorer distills its judgments | [StartLux-Decision v1.1 27B Instant](https://huggingface.co/startlux-models/StartLux-Decision-v1.1-27B-Instant), a model with open weights |
 | Training data | Teacher judgments for the pair scorer, and labeled samples for the chooser | Teacher judgments, synthetic strings in non-Latin scripts, and labeled strings |
 | Services | The similar-strings generator needs the OpenAlex search index, which is not public | All parts use public files. The teacher, the retriever and the set model have open weights |
 | Evaluation | Random OpenAlex strings and external sets | The same kinds of sets, and a split by institution. This split measures institutions that the training data does not contain |
@@ -238,6 +238,6 @@ Each model repository contains its training folder (`training_data/`), in the fo
 | `src/ror_set_point/inference/lexical.py` | MIT, from openalex-affiliation-matcher (the notice is in the file) |
 | ROR records | CC0 |
 | OpenAlex strings and institutions | CC0 |
-| Teacher judgments | CC0. They come from StartLux-Decision v1.1 27B Instant by StartLux Labs. Its weights (CC BY-NC 4.0) are not part of this project |
+| Teacher judgments | CC0. They come from [StartLux-Decision v1.1 27B Instant](https://huggingface.co/startlux-models/StartLux-Decision-v1.1-27B-Instant) by StartLux Labs. Its weights (CC BY-NC 4.0) are not part of this project |
 | Retriever weights | MIT, from multilingual-e5-base |
 | Set model weights | MIT, from mmBERT-base |
