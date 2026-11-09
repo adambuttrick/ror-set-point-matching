@@ -10,6 +10,7 @@ This document tells how to run the pipeline on [Hugging Face Jobs](https://huggi
 | `evaluate.sh` | 4. Score answers against a labeled split | CPU |
 | `pipeline.sh` | Steps 1 to 4 in one job | GPU |
 | `verify.sh` | Steps 1 to 4 on the test splits, compared with the published results | GPU |
+| `relabel.sh` | Asks the teacher model about the pairs of one shard ([The teacher](#the-teacher)) | GPU |
 | `submit.sh` | Starts a step as a job. It runs on your computer | |
 
 `lib.sh` holds the parts that the steps share. `fetch.py` downloads the inputs and checks them, `shards.py` runs match on several GPUs, and `check.py` compares outputs with the published files.
@@ -37,7 +38,7 @@ This document tells how to run the pipeline on [Hugging Face Jobs](https://huggi
 
 The image is `ghcr.io/astral-sh/uv:0.12.1-python3.12-trixie` (`IMAGE` changes it). Each job has its own copy of the code. Thus a change to the code does not change a job that has started.
 
-The steps on a CPU run the code with the Python of the image, because they need only the standard library. The steps on a GPU first make the project's environment with `uv sync --locked --extra gpu`. This takes 30 to 50 seconds. They stop when flash-attn does not import, because the set model would then run 5.6 times slower.
+The steps on a CPU run the code with the Python of the image, because they need only the standard library. The steps on a GPU first make the project's environment with `uv sync --locked --extra gpu`. This takes 40 to 60 seconds. They stop when flash-attn does not import, because the set model would then run 5.6 times slower.
 
 The options of the steps are environment variables (`-e NAME=value`). These options are the same in all steps:
 
@@ -79,7 +80,7 @@ For a newer release, give `-e ROR_VERSION=v2.15` or `-e ROR_VERSION=latest`. `la
 jobs/submit.sh index --flavor l4x1 --timeout 30m
 ```
 
-The step runs `python -m ror_set_point.inference.retriever --records ... --record-vectors ...` with no `--queries`. It encodes the 143,284 record texts and writes `VECTORS` (210 MB). The file holds the name of the retriever and the sha256 of the records file. When they are the same, the step reads the file and does not encode the records again. Thus the step is fast when the index exists.
+The step runs `python -m ror_set_point.inference.retriever --records ... --record-vectors ...` with no `--queries`. It encodes the 143,284 record texts and writes `VECTORS` (210 MB). The file holds the name of the retriever, a sha256 of its weights and the sha256 of the records file. When they are the same, the step reads the file and does not encode the records again. Thus the step is fast when the index exists.
 
 `match` makes the index too, when `VECTORS` does not exist. Thus step 2 is necessary only when you want the index before you match.
 
@@ -132,7 +133,7 @@ On a flavor with several GPUs, for example `h200x8`, `match.sh` runs one match p
 
 When a process fails, the others go on. The next run with the same number of GPUs continues each part. With another number of GPUs, the step stops: remove `OUT.parts`, or use the first flavor again. When `OUT` exists from a run with one process and is not complete, the step also stops. Continue that run on one GPU.
 
-On 4 × NVIDIA L4 (`l4x4`), `verify.sh` answered the 40,000 strings of `openalex_sample` test in 201 seconds, with loading. One L4 answers about 68 strings each second. The answers of the parts are the answers of one process, to within the noise of the GPU (see [Check the pipeline](#check-the-pipeline)).
+On 4 × NVIDIA L4 (`l4x4`), `verify.sh` answered the 40,000 strings of `openalex_sample` test in 199 seconds, with loading. One L4 answers about 66 strings each second. The answers of the parts are the answers of one process, to within the noise of the GPU (see [Check the pipeline](#check-the-pipeline)).
 
 ## Step 4: score
 
@@ -152,6 +153,36 @@ jobs/submit.sh pipeline --flavor h200 --timeout 3h --attempts 3 \
 
 `pipeline.sh` runs steps 1, 2 and 3, and step 4 when `GOLD` is given. A step whose output exists is skipped or continued. Thus the same command again, or another attempt, continues the job.
 
+## The teacher
+
+`relabel.sh` asks the teacher model the question of phase 1 about each (string, ROR record) pair of one shard ([phase 1, step 4](training-1-data.md#step-4-ask-the-teacher)). The teacher is StartLux-Decision v1.1 27B Instant, at revision `32e7d35`. The job serves it with vLLM 0.31.0 and `startlux-decide` (commit `a99977d`), in an environment of its own. Each job needs one H200.
+
+Score the calibration pairs in 8 jobs, and the teacher pairs in 24 jobs:
+
+```
+SHARDS=8 jobs/submit.sh relabel --flavor h200 --timeout 2h --detach \
+    -e STAGE2=/set_model/training_data/stage2.jsonl.gz \
+    -v hf://adambuttrick/ror-set-point-set-model-mmbert-base-openalex-jev-distill:/set_model
+SHARDS=24 jobs/submit.sh relabel --flavor h200 --timeout 4h --detach
+```
+
+With `SHARDS=N`, `submit.sh` starts N jobs, and gives `-e SHARD=i -e SHARDS=N` to job i. It needs `--detach`.
+
+| Variable | Default | Content |
+|---|---|---|
+| `SHARD`, `SHARDS` | | The shard of the job, from 0 to `SHARDS` - 1 |
+| `TEACHER` | `/dataset/data/teacher_judgments` | A `teacher_judgments` folder. The pairs are its judgments. The pairs of this config are the pairs of Jev's config, in the same order |
+| `STAGE2` | | Stage 2 rows of the set model. The pairs are their candidates, with labels and folds. They replace `TEACHER` |
+| `OUT` | `/bucket/runs/relabel/teacher`, or `/bucket/runs/relabel/stage2` with `STAGE2` | The folder of the run |
+| `QUESTION` | `questions/v1.2.txt` of the code | The question |
+| `CONCURRENCY` | 256 | The requests at a time |
+
+Each job writes `OUT/shard-II-of-NN/`: `requests.json` (the counts), `scores.jsonl`, `summary.json` (the speed and the errors) and `logs/`. The job stops when the server does not use the prompt attention of the `startlux-decide` plugin. When pairs have no p after the score step, the job does the step again, up to 3 times. A new job of the same shard continues the same `scores.jsonl`.
+
+A job takes about 6 minutes to install vLLM, download the model and start the server. Then it answers 24 pairs each second, with about 514 tokens in each request. One of 24 shards of the teacher pairs (about 157,000 pairs) takes about 1.9 hours and costs about $9.50. One of 8 shards of the calibration pairs (about 77,000 pairs) takes about 1 hour.
+
+When all jobs are complete, copy the `scores.jsonl` files of the two runs from the bucket (`hf buckets sync`). Then do parts 3 and 4 of [phase 1, step 4](training-1-data.md#step-4-ask-the-teacher) on a CPU.
+
 ## Check the pipeline
 
 ```
@@ -167,60 +198,60 @@ jobs/submit.sh verify --flavor h200 --timeout 1h -e RUN=/bucket/runs/verify-h200
 
 `RUN/summary.md` holds the results. Use the check after a change to the code, the image or the versions of the packages.
 
-On 1 × NVIDIA H200 (1 November 2026):
+On 1 × NVIDIA H200 (9 November 2026):
 
 | Test split | Strings | Same candidate list | Same answer | This run and published |
 |---|---:|---:|---:|---|
-| `affiliations` | 1,947 | 100% | 1,947 | 90.4 / 96.1 / 92.6 |
-| `affiliations_unseen_institutions` | 1,957 | 100% | 1,957 | 84.7 / 94.6 / 87.4 |
-| `datacite` | 3,000 | 100% | 3,000 | 93.1 / 97.8 / 94.4 |
-| `openalex_sample` | 40,000 | 100% | 40,000 | 90.2 / 96.0 / 92.7 |
+| `affiliations` | 1,947 | 100% | 1,947 | 91.5 / 96.8 / 93.2 |
+| `affiliations_unseen_institutions` | 1,957 | 100% | 1,957 | 85.0 / 95.8 / 88.0 |
+| `datacite` | 3,000 | 100% | 3,000 | 93.3 / 98.1 / 94.5 |
+| `openalex_sample` | 40,000 | 100% | 40,000 | 90.8 / 96.3 / 93.2 |
 
 The values are exact match / precision / recall, in percent. The candidate lists are equal, in the same order, and the answers are equal.
 
-On 4 × NVIDIA L4, with one part of each split on each GPU, with [ror-set-point-set-model-mmbert-base](https://huggingface.co/adambuttrick/ror-set-point-set-model-mmbert-base) (the set model without the mention mask) and its published answers:
+On 4 × NVIDIA L4, with one part of each split on each GPU, against the published answers:
 
 | Test split | Same candidate set | Same candidate list | Same answer | This run | Only this run right | Only published right |
 |---|---:|---:|---:|---|---:|---:|
-| `affiliations` | 89.4% | 26.0% | 1,934 | 90.0 / 95.6 / 92.7 | 5 | 6 |
-| `affiliations_unseen_institutions` | 89.2% | 28.7% | 1,930 | 83.3 / 94.6 / 86.6 | 5 | 12 |
-| `datacite` | 93.4% | 36.7% | 2,980 | 93.3 / 97.9 / 94.4 | 5 | 13 |
-| `openalex_sample` | 91.3% | 28.7% | 39,736 | 90.1 / 95.9 / 92.7 | 93 | 119 |
+| `affiliations` | 78.2% | 3.3% | 1,931 | 91.5 / 96.8 / 93.4 | 7 | 7 |
+| `affiliations_unseen_institutions` | 78.6% | 3.5% | 1,915 | 84.8 / 95.6 / 87.7 | 13 | 18 |
+| `datacite` | 78.7% | 4.3% | 2,973 | 93.4 / 98.1 / 94.5 | 11 | 10 |
+| `openalex_sample` | 78.0% | 4.0% | 39,588 | 90.8 / 96.3 / 93.2 | 162 | 153 |
 
-No difference is significant (p ≥ 0.08). The candidate lists differ because the retriever's scores change a little with the GPU, and with the other strings of a batch. Two records with almost the same score can then change places in the top 32. The candidates are put in a random order that depends on the string and on the order of the list ([inference.md](inference.md#match-in-two-steps)). Thus a change of two places gives another order.
+No difference is significant (p ≥ 0.47). The candidate lists differ because the retriever's scores change a little with the GPU, and with the other strings of a batch. Two records with almost the same score can then change places in the top 32. The candidates are put in a random order that depends on the string and on the order of the list ([inference.md](inference.md#match-in-two-steps)). Thus a change of two places gives another order.
 
 On the `affiliations` test split, these pairs of runs gave the same candidates for this share of the strings:
 
 | Runs | Same candidate set | Same candidate list |
 |---|---:|---:|
-| 1 × L4 and the H200 | 89.9% | 26.8% |
-| 1 × L4 and 4 × L4 | 96.0% | 74.4% |
+| 1 × L4 and the H200 | 78.2% | 3.2% |
+| 1 × L4 and 4 × L4 | 95.8% | 71.5% |
 
-On `openalex_sample` test, `verify.sh` on 1 × L4 gave the same answer as the H200 for 99.35% of the strings, with the set model without the mention mask. Use an H200 to get the published candidates again.
+On `openalex_sample` test, `verify.sh` on 1 × L4 gave the same answer as the H200 for 98.9% of the strings. Use an H200 to get the published candidates again.
 
 ## Times and costs
 
-The times of the checks above, on 24 and 25 October 2026. The cost is the running time at the price of the flavor (`hf jobs hardware`). A job also waits for a machine before it runs: about 10 seconds for `cpu-basic` and `h200`, and about 100 seconds for the L4 flavors.
+The times of the checks above, on 24 and 25 October and 9 November 2026. The cost is the running time at the price of the flavor (`hf jobs hardware`). A job also waits for a machine before it runs: about 10 seconds for `cpu-basic` and `h200`, and about 100 seconds for the L4 flavors.
 
 | Job | Flavor | Running time | Cost |
 |---|---|---:|---:|
 | `ror_data`, v2.14, with the comparison | `cpu-basic` | 42 s | < $0.01 |
 | `ror_data`, v2.15 (145,275 records) | `cpu-basic` | 62 s | < $0.01 |
-| `index`, v2.15 | `l4x1` | 132 s | $0.03 |
-| `verify` | `h200` | 389 s | $0.54 |
-| `verify` | `l4x4` | 647 s | $0.68 |
-| `verify` | `l4x1` | 1,065 s | $0.24 |
-| `pipeline`, 40,000 strings, in two jobs | `l4x1` | 288 s + 506 s | $0.18 |
+| `index`, v2.15 | `l4x1` | 135 s | $0.03 |
+| `verify` | `h200` | 490 s | $0.68 |
+| `verify` | `l4x4` | 706 s | $0.75 |
+| `verify` | `l4x1` | 1,121 s | $0.25 |
+| `pipeline`, 40,000 strings, in two jobs | `l4x1` | 296 s + 584 s | $0.20 |
 
 The parts of a job on a GPU:
 
 | Part | `h200` | `l4x1` |
 |---|---:|---:|
-| `uv sync --locked --extra gpu` | 32 s | 50 s |
-| Index of 143,284 records, with loading | 32 s | 68 s (v2.15) |
-| Loading of match run with the index (lexical index, retriever, set model) | about 33 s | about 45 s |
-| Set model | 623 strings each second | 65 strings each second |
-| Cost of the set model for 1 million strings | $2.23 | $3.42 |
+| `uv sync --locked --extra gpu` | 41 s | 48 s |
+| Index of 143,284 records, with loading | 39 s | 71 s |
+| Loading of match run with the index (lexical index, retriever, set model) | about 35 s | about 32 s |
+| Set model | 602 strings each second | 66 strings each second |
+| Cost of the set model for 1 million strings | $2.31 | $3.37 |
 
 The H200 is the fastest, and the cheapest for each string. A flavor with several H200s costs the same for each GPU, and has the same vCPUs for each GPU. Thus it should divide the time by the number of GPUs at the same cost (not measured). For a few thousand strings, `l4x1` is cheaper, because each job pays for its setup and loading.
 

@@ -32,6 +32,20 @@ def write_jsonl(path, rows):
     return n
 
 
+def complete_rows(path):
+    """Cut a partial last line off path, and return the number of lines left (0 when there is no file)."""
+    if not os.path.exists(path):
+        return 0
+    n = size = 0
+    with open(path, "rb") as f:
+        for line in f:
+            if not line.endswith(b"\n"):
+                break
+            n, size = n + 1, size + len(line)
+    os.truncate(path, size)
+    return n
+
+
 def sha256(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:

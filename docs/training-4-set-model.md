@@ -2,11 +2,11 @@
 
 The set model selects the records that a string names. It reads the string and all its candidate records in one input, and gives each candidate the probability that the string names it. The answer is every candidate with p ≥ 0.5.
 
-The released model is [ror-set-point-set-model-mmbert-base-mask](https://huggingface.co/adambuttrick/ror-set-point-set-model-mmbert-base-mask). Its training uses the mention mask, which removes some negatives from the loss (see [The mention mask](#the-mention-mask)).
+The released model is [ror-set-point-set-model-mmbert-base-mask](https://huggingface.co/adambuttrick/ror-set-point-set-model-mmbert-base-mask). It learns from the StartLux judgments of phase 1 and the candidates of the released retriever. Its training uses the mention mask, which removes some negatives from the loss (see [The mention mask](#the-mention-mask)).
 
 ## The model
 
-1. The candidates are the retriever's top 32, then the lexical top 10 that are not already there (about 37.5 for each string). They are in a random order.
+1. The candidates are the retriever's top 32, then the lexical top 10 that are not already there (about 38 for each string). They are in a random order.
 2. The input is `[CLS] string [SEP] record 1 [SEP] record 2 [SEP] ...`. Each record is its `text` field.
 3. A linear layer gives a score to each candidate, from the mean of the token states of that candidate.
 4. Platt scaling changes each score into a probability: p = 1 / (1 + exp(-(a × score + b))).
@@ -23,11 +23,11 @@ The model reads the candidates together. Thus it can learn rules that compare ca
 
 | Stage | Source | Strings | Candidates | Targets |
 |---|---|---:|---|---|
-| 1 | `teacher_judgments` train, without the strings that the exclusion rule removes | 167,533 | The retriever's top 32, then the records that the teacher judged and that are not in it (positives first), to a maximum of 42 | The teacher's p. 0 for records with no judgment |
+| 1 | `teacher_judgments` train, without the strings that the exclusion rule removes | 176,551 | The retriever's top 32, then the records that the teacher judged and that are not in it (positives first), to a maximum of 42 | The teacher's p. 0 for records with no judgment |
 | 1 | `synthetic_non_latin`, without the strings that name a held-out record | 130,882 | The retriever's top 32 | 1 for the labels, 0 for other records |
 | 2 | `affiliations_unseen_institutions` train | 16,448 | The retriever's top 32 and the lexical top 10 | 1 for the labels, 0 for other records |
 
-- A label that is not among the candidates replaces a random candidate that is not a label (663 times).
+- A label that is not among the candidates replaces a random candidate that is not a label (340 times).
 - Labeled and synthetic strings that are equal to an evaluation string are not used (4 of each).
 - The retriever trained on these strings. Thus their candidate lists hold the labels more often than the lists of new strings. The replacement of missing labels makes sure that each label is a candidate in training.
 - The evaluation rows (`eval.jsonl.gz`) have the evaluation strings and their candidates, with no labels.
@@ -52,10 +52,10 @@ Only names and acronyms of exactly one record count. Thus a generic name, for ex
 
 | Rows | Rows with a candidate out of the loss | Candidates out of the loss |
 |---|---:|---:|
-| Stage 1 | 2,728 | 2,753 |
-| Stage 2 | 460 | 491 |
+| Stage 1 | 10,346 | 10,819 |
+| Stage 2 | 1,025 | 1,096 |
 
-The 3,244 candidates are on 1,086 records. 104 of these records are held-out records. The other 982 records also have no positive in training, so for the model they are new institutions too. The mask does not change the candidates whose record is a positive in a training row.
+The 11,915 candidates are on 2,256 records. 200 of these records are held-out records. The other 2,056 records also have no positive in training, so for the model they are new institutions too. The mask does not change the candidates whose record is a positive in a training row.
 
 ## Procedure
 
@@ -73,7 +73,7 @@ The commands use the folders of phases 1 to 3 and `U=dataset/data/affiliations_u
        --out set_data -v
    ```
 
-   The `--eval` options must be the same as in phase 3, because `--retrieved` holds the search results of those queries. `--strict` leaves out the synthetic strings that name a held-out record, as in phase 3. Then no training row of the two models has a held-out record as a positive. But stage 1 can give a held-out record a target below 0.5 (see [phase 1](training-1-data.md#strings-that-training-does-not-use)). `--mask-mentions` adds the mention mask.
+   With the dataset and `search/topk.jsonl.gz` of the released retriever, this step makes the `training_data/` folder of the released set model, byte for byte. The `--eval` options must be the same as in phase 3, because `--retrieved` holds the search results of those queries. `--strict` leaves out the synthetic strings that name a held-out record, as in phase 3. Then no training row of the two models has a held-out record as a positive. But stage 1 can give a held-out record a target below 0.5 (see [phase 1](training-1-data.md#strings-that-training-does-not-use)). `--mask-mentions` adds the mention mask.
 
 2. Do a smoke test:
 
@@ -90,7 +90,7 @@ The commands use the folders of phases 1 to 3 and `U=dataset/data/affiliations_u
        --base jhu-clsp/mmBERT-base --base-revision c5955035435e2bf121cde7f3c8863ef52ff35d82
    ```
 
-   `--stage1 FILE` writes the stage 1 weights to FILE. When FILE exists, the script reads the weights from it and does not train stage 1. The stage 1 rows and the stage 1 settings must be the same. If they are not, the script stops. Stage 1 rows have no lexical candidates. Thus runs that differ only in their lexical candidates, for example with another `--lexical-k`, can use the same stage 1. This saves 1.7 hours on an H200.
+   `--stage1 FILE` writes the stage 1 weights to FILE. When FILE exists, the script reads the weights from it and does not train stage 1. The stage 1 rows and the stage 1 settings must be the same. If they are not, the script stops. Stage 1 rows have no lexical candidates. Thus runs that differ only in their lexical candidates, for example with another `--lexical-k`, can use the same stage 1. This saves 1.8 hours on an H200.
 
 The training script does these steps in sequence:
 
@@ -114,7 +114,7 @@ The training script does these steps in sequence:
 | Setting | Value |
 |---|---|
 | Loss | Binary cross-entropy against the targets, over the real candidates that the mention mask keeps |
-| Stage 1 | 1 epoch (18,651 steps) at learning rate 2e-5 |
+| Stage 1 | 1 epoch (19,215 steps) at learning rate 2e-5 |
 | Stage 2 | 2 epochs at learning rate 1e-5, from the stage 1 weights. The final run has 2,056 steps |
 | Folds | 5, by the sha256 of the fold seed (20261022) and the string id |
 | Batch | 16 strings |
@@ -125,19 +125,19 @@ The training script does these steps in sequence:
 | Seed | 1363 |
 | Threshold | 0.5 |
 
-The calibration of the released model is a = 0.807 and b = -0.170. The fit used 615,010 out-of-fold candidates. On the out-of-fold answers, precision is 95.1, recall 94.1 and exact match 90.5.
+The calibration of the released model is a = 0.781 and b = -0.250. The fit used 620,717 out-of-fold candidates. On the out-of-fold answers, precision is 95.2, recall 94.3 and exact match 90.8.
 
-On the out-of-fold candidates, p agrees with the frequency of correct candidates. For example, the candidates with p from 0.35 to 0.5 have a mean p of 0.43, and 48% of them are correct. On the `affiliations` validation split, a new fit gives a = 0.846 and b = 0.095.
+On the out-of-fold candidates, p agrees with the frequency of correct candidates. For example, the candidates with p from 0.35 to 0.5 have a mean p of 0.42, and 46% of them are correct. On the `affiliations` validation split, a new fit gives a = 0.832 and b = 0.143.
 
-On the `affiliations_unseen_institutions` validation split, p from 0.05 to 0.5 is lower than the frequency of correct candidates. For example, 47% of the candidates with p from 0.2 to 0.35 are correct. This split is not a measure of calibration. It contains every labeled string that names a held-out record. Thus a candidate that is a held-out record is correct more frequently in this split than in other strings. In this split, 41% of these candidates are correct, and on the `affiliations` validation split 7.8%. When only this share changes, b moves by the change in its log-odds (2.1). A new fit on these candidates gives b = 3.32 on this split and b = 1.26 on the `affiliations` validation split, a difference of 2.06.
+On the `affiliations_unseen_institutions` validation split, p from 0.05 to 0.5 is lower than the frequency of correct candidates. For example, 52% of the candidates with p from 0.2 to 0.35 are correct. This split is not a measure of calibration. It contains every labeled string that names a held-out record. Thus a candidate that is a held-out record is correct more frequently in this split than in other strings. In this split, 40% of these candidates are correct, and on the `affiliations` validation split 7.2%. When only this share changes, b moves by the change in its log-odds (2.2). A new fit on these candidates gives b = 3.59 on this split and b = 1.39 on the `affiliations` validation split, a difference of 2.19.
 
-On the `affiliations` validation split, the difference for held-out records is smaller. Of the 26 candidates that are held-out records and have p from 0.05 to 0.5, 15 are correct. For the other records with no positive in training, p is equal to or higher than the frequency of correct candidates. A threshold below 0.5 does not increase exact match on this split. Exact match is 91.4 at 0.5, 91.5 at 0.4 and 91.2 at 0.3.
+On the `affiliations` validation split, the difference for held-out records is smaller. Of the 28 candidates that are held-out records and have p from 0.05 to 0.5, 17 are correct. For the other records with no positive in training, p is equal to or higher than the frequency of correct candidates. On this split, exact match is 91.7 at the threshold 0.5, 92.1 at 0.4 and 91.6 at 0.3. Another order of the candidates changes exact match on this split by up to 0.7 points ([evaluation.md](evaluation.md#notes)).
 
 The values come from `oof.jsonl.gz` and `probabilities.jsonl.gz` in the repository of the released model.
 
 ## Hardware and time
 
-The released model trained on 1 × NVIDIA H200 in 2.8 hours. The training script answers 128 strings each second on that GPU, in padded batches. At inference, with packed batches and flash-attention, it answers 753 strings each second ([inference.md](inference.md#the-set-model-on-a-cuda-gpu)).
+The released model trained on 1 × NVIDIA H200 in 2.8 hours. The training script answers 126 strings each second on that GPU, in padded batches. At inference, with packed batches and flash-attention, it answers 741 strings each second ([inference.md](inference.md#the-set-model-on-a-cuda-gpu)).
 
 ## Evaluation
 
@@ -147,15 +147,15 @@ Exact match, precision and recall in percent. The answers on the test split come
 |---|---:|---|---:|---:|---:|
 | `affiliations_unseen_institutions` test | 1,957 | v3.0.0, local | 77.0 | 95.9 | 80.0 |
 |  |  | Baseline | 79.2 | 93.6 | 85.1 |
-|  |  | This model | 84.7 | 94.6 | 87.4 |
+|  |  | This model | 85.0 | 95.8 | 88.0 |
 | `affiliations_unseen_institutions` validation | 1,914 | v3.0.0, local | 62.7 | 96.5 | 67.7 |
 |  |  | Baseline | 75.0 | 94.8 | 84.8 |
-|  |  | This model | 75.4 | 95.7 | 82.7 |
+|  |  | This model | 79.9 | 97.2 | 86.4 |
 | `affiliations` validation | 1,947 | v3.0.0, local | 80.1 | 93.5 | 79.6 |
 |  |  | Baseline | 85.7 | 94.7 | 87.4 |
-|  |  | This model | 91.4 | 96.7 | 92.5 |
+|  |  | This model | 91.7 | 96.7 | 92.6 |
 
-Recall of the links to the 1,255 held-out institutions is 86.3 for the baseline and 90.0 for this model on the test split (1,755 links). On the validation split (1,844 links), it is 84.9 and 80.0.
+Recall of the links to the 1,255 held-out institutions is 86.3 for the baseline and 89.8 for this model on the test split (1,755 links). On the validation split (1,844 links), it is 84.9 and 84.8.
 
 The baseline ([ror-set-point-pair-scorer-baseline](https://huggingface.co/adambuttrick/ror-set-point-pair-scorer-baseline)) trained on the same labeled strings. The validation split of `affiliations_unseen_institutions` contains all 272 links to CNRS.
 
@@ -167,49 +167,31 @@ Each set-model repository holds the training folder (`training_data/`), which `t
 
 | Variant | Options | Parameters | Training time | Strings each second (padded, in training) |
 |---|---|---:|---|---:|
-| Released (mmBERT-base, with the mask) | Rows built with `--mask-mentions` | 307M | 2.8 hours | 128 |
-| mmBERT-base, no mask ([ror-set-point-set-model-mmbert-base](https://huggingface.co/adambuttrick/ror-set-point-set-model-mmbert-base)) | Rows built without `--mask-mentions` | 307M | 2.8 hours | 130 |
-| bge-reranker-v2-m3 | `--base BAAI/bge-reranker-v2-m3 --base-revision 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e --lr 1e-5`, rows built without `--strict` and `--mask-mentions` | 568M | 5.4 hours | 97 |
-| EmbeddingGemma-300m | `--base google/embeddinggemma-300m --base-revision 57c266a740f537b4dc058e1b0cda161fd15afa75 --record-length 48 --max-length 2048`, rows built without `--strict` and `--mask-mentions` | 303M | 4.2 hours | 140 |
+| Released (mmBERT-base, with the mask) | Rows built with `--mask-mentions` | 307M | 2.8 hours | 126 |
+| Jev teacher ([ror-set-point-set-model-mmbert-base-openalex-jev-distill](https://huggingface.co/adambuttrick/ror-set-point-set-model-mmbert-base-openalex-jev-distill)) | Rows built with `--mask-mentions` from Jev's judgments and the search results of the Jev retriever (see below) | 307M | 2.8 hours | 128 |
 
-### With and without the mention mask
+All times are on 1 × NVIDIA H200.
 
-Exact match in percent, with and without the mask. The two models have the same settings and seed, and read the same candidates. The last two columns give the strings that only one model gets right, and the exact McNemar p-value.
+### With the StartLux and Jev teachers
 
-| Split | No mask | Released (with the mask) | Right only with no mask / only with the mask | p |
-|---|---:|---:|---:|---:|
-| `affiliations_unseen_institutions` test | 83.6 | 84.7 | 41 / 62 | 0.048 |
-| `affiliations` test | 90.0 | 90.4 | 38 / 46 | 0.45 |
-| `affiliations_unseen_institutions` validation | 73.9 | 75.4 | 43 / 72 | 0.009 |
-| `affiliations` validation | 91.0 | 91.4 | 30 / 38 | 0.4 |
+The Jev variant (`-openalex-jev-distill`) learns from Jev's judgments in phases 3 and 4. Its candidates come from the Jev retriever of [phase 3](training-3-retriever.md#variants). The lexical candidates of its stage 2 rows come from an index that reads the institutions file of openalex-affiliation-matcher v3.0.0 and adds a bonus for the works count. The other settings are the same as for the released model.
 
-- The recall of the links to held-out institutions is 90.0 with the mask and 89.6 without it on the test split. On the validation split, it is 80.0 and 78.7.
-- The validation split has 391 links to held-out records that have a candidate out of the loss in training. The recall of these links is 76.7 with the mask and 69.1 without it.
-- The seed of the training run also changes the results. Over 4 seeds, exact match on the `affiliations_unseen_institutions` validation split is 75.4 to 77.1 with the mask, and 73.0 to 76.2 without it. On the `affiliations` validation split, it is 90.3 to 91.5 with the mask, and 90.3 to 91.4 without it.
+Exact match in percent on the validation splits, for 4 seeds of each pipeline. All 8 answer files come from `match run`, with the current lexical index and the retriever of each pipeline.
 
-### Base models
+| Seed | `affiliations_unseen_institutions` validation: Jev / StartLux | `affiliations` validation: Jev / StartLux |
+|---|---:|---:|
+| 1363 | 74.7 / 80.0 | 91.4 / 91.8 |
+| 2718 | 76.9 / 81.1 | 91.2 / 90.9 |
+| 4242 | 75.7 / 81.7 | 91.5 / 91.8 |
+| 8128 | 75.1 / 81.3 | 90.2 / 91.8 |
+| Mean | 75.6 / 81.0 | 91.1 / 91.6 |
 
-Exact match, precision and recall of the base models, in percent. The three models train without `--mask-mentions`.
+- On the `affiliations_unseen_institutions` validation split, the StartLux pipeline is better at each seed (exact McNemar p < 10⁻⁸). The mean gain is 5.4 points. Without the CNRS strings, it is 1.9 points. The recall of the links to CNRS is 35 to 45% with Jev and 68 to 81% with StartLux.
+- On the `affiliations` validation split, the mean gain is 0.5 points. Only the gain of seed 8128 is significant (p = 0.003).
+- Precision is higher with StartLux: by 1.0 point on the `affiliations_unseen_institutions` validation split and by 0.1 points on the `affiliations` validation split (means).
+- The seed of the training run also changes the results. Between the seeds of one pipeline, exact match on the `affiliations_unseen_institutions` validation split changes by up to 2.2 points. On the `affiliations` validation split, it changes by up to 1.3 points.
 
-| Split | Base model | Exact match | Precision | Recall |
-|---|---|---:|---:|---:|
-| `affiliations_unseen_institutions` test | mmBERT-base | 83.7 | 94.5 | 86.8 |
-|  | bge-reranker-v2-m3 | 82.3 | 93.6 | 86.9 |
-|  | EmbeddingGemma-300m | 81.5 | 94.4 | 84.8 |
-| `affiliations` test | mmBERT-base | 90.3 | 95.8 | 92.6 |
-|  | bge-reranker-v2-m3 | 90.4 | 95.6 | 92.1 |
-|  | EmbeddingGemma-300m | 90.7 | 96.6 | 92.0 |
-| `affiliations` validation | mmBERT-base | 91.0 | 96.5 | 91.9 |
-|  | bge-reranker-v2-m3 | 90.2 | 96.0 | 91.5 |
-|  | EmbeddingGemma-300m | 91.2 | 96.4 | 92.8 |
-
-On the test splits, the three models answer the same candidate lists, in [revision `ae056b6`](https://huggingface.co/adambuttrick/ror-set-point-set-model-mmbert-base/tree/ae056b667c8d8cb7db723f009f2fda03efb391da/evaluation/candidates) of the repository of ror-set-point-set-model-mmbert-base. Their lexical candidates come from an index that reads the institutions file of openalex-affiliation-matcher v3.0.0 and adds a bonus for the works count. Thus the values of mmBERT-base differ a little from those in [With and without the mention mask](#with-and-without-the-mention-mask).
-
-The rows of bge-reranker-v2-m3 and EmbeddingGemma-300m contain the synthetic strings that name a held-out record. Thus their values on `affiliations_unseen_institutions` are not a measure of new institutions.
-
-To select a base model, compare exact match on the `affiliations_unseen_institutions` validation split without the CNRS strings (1,642 strings). When two results are within 1 point, select the faster model.
-
-All times are on 1 × NVIDIA H200. EmbeddingGemma reads a maximum of 2,048 tokens, so its records have a maximum of 48 tokens. bge-reranker-v2-m3 uses the Apache-2.0 license, and EmbeddingGemma uses the Gemma terms of use.
+[evaluation.md](evaluation.md#teacher-variant) gives the test splits.
 
 ## Limitations
 

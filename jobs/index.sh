@@ -5,8 +5,8 @@
 #   RETRIEVER  a retriever folder or Hub repository (default adambuttrick/ror-set-point-retriever-e5-base)
 #   VECTORS    the file to write (default /bucket/index/<records folder name>/<retriever name>.pt)
 #
-# The file keeps the retriever name and the sha256 of the records file. When they are the same, the file is read and
-# not written again. match reads it with --record-vectors.
+# The file keeps the retriever name, a sha256 of its weights and the sha256 of the records file. When they are the
+# same, the file is read and not written again. match reads it with --record-vectors.
 source "$(dirname "$0")/lib.sh"
 
 describe_job

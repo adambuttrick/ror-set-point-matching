@@ -25,8 +25,9 @@ those that give it less. Thus without the mask, the training rows teach that a h
 the string names it.
 
 --retrieved is the training run's topk.jsonl.gz (ror_set_point.training.retriever.train), which has the queries of
-ror_set_point.training.retriever.build. Writes into --out (which must not exist): those files, records.jsonl.gz {ror_id,
-text} and manifest.json.
+ror_set_point.training.retriever.build. Each string that the step uses must have a search result in it, or the step
+stops with an error. Writes into --out (which must not exist): those files, records.jsonl.gz {ror_id, text} and
+manifest.json.
 """
 import argparse
 import collections
@@ -121,6 +122,13 @@ def main():
     write_jsonl(os.path.join(a.out, "records.jsonl.gz"),
                 ({"ror_id": r["ror_id"], "text": r["text"]} for r in read_records(a.records)))
     top = {(d["set"], d["id"]): [sys.intern(x) for x in d["ids"][:a.k]] for d in read_jsonl(a.retrieved)}
+
+    def retrieved(name, key):
+        if (name, key) not in top:
+            raise SystemExit(f"{a.retrieved} has no search result for the {name} string {key!r}. The search results "
+                             "must come from the queries of ror_set_point.training.retriever.build with the same "
+                             "inputs (for teacher strings: the same --teacher, --held-out and --eval files)")
+        return top[(name, key)]
     index = LexicalIndex(a.records)
     texts = [r["text"] for r in read_jsonl(a.labelled)] + [r["text"] for _, p in a.eval for r in read_jsonl(p)]
     lexical = dict(zip(texts, index.top_many(texts, a.lexical_k, a.workers)))
@@ -149,7 +157,7 @@ def main():
             if why:
                 counts[f"teacher_left_out: {why}"] += 1
                 continue
-            base = top[("teacher", r["id"])]
+            base = retrieved("teacher", r["id"])
             p = {j["ror_id"]: j["p"] for j in r["judgments"]}
             outside = [x for x in p if x not in base]
             rng.shuffle(outside)
@@ -163,7 +171,7 @@ def main():
             if not keep(t["text"], "synthetic"):
                 continue
             gold = set(t["ror_ids"])
-            c = cands(top[("synthetic", n)], [], t["ror_ids"])
+            c = cands(retrieved("synthetic", n), [], t["ror_ids"])
             counts["stage1_synthetic"] += 1
             yield {"s": t["text"], "c": c, "y": [float(x in gold) for x in c], "src": "synthetic"}
 
@@ -172,7 +180,7 @@ def main():
             if not keep(r["text"], "labelled"):
                 continue
             gold = set(r["ror_ids"])
-            c = cands(top[("labelled", r["id"])], lexical[r["text"]], r["ror_ids"])
+            c = cands(retrieved("labelled", r["id"]), lexical[r["text"]], r["ror_ids"])
             fold = int(hashlib.sha256(f"{a.fold_seed}|{r['id']}".encode()).hexdigest(), 16) % a.folds
             counts[f"stage2_fold{fold}"] += 1
             yield {"k": r["id"], "s": r["text"], "c": c, "y": [float(x in gold) for x in c], "fold": fold}
@@ -180,7 +188,7 @@ def main():
     def evaluation():
         for name, path in a.eval:
             for r in read_jsonl(path):
-                c = cands(top[(name, r["id"])], lexical[r["text"]])
+                c = cands(retrieved(name, r["id"]), lexical[r["text"]])
                 counts[f"eval_{name}"] += 1
                 counts[f"eval_{name}_candidates"] += len(c)
                 yield {"set": name, "k": r["id"], "s": r["text"], "c": c}
