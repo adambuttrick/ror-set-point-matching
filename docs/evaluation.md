@@ -113,8 +113,6 @@ The systems are:
 | Baseline, unseen split | The design of v3.0.0, retrained on the train split of `affiliations_unseen_institutions` ([ror-set-point-pair-scorer-baseline](https://huggingface.co/adambuttrick/ror-set-point-pair-scorer-baseline)). Its pair scorer starts from the pair scorer of v3.0.0 and also trains on teacher pairs |
 | Baseline, all | The same design, retrained on `affiliations` train and `openalex_sample` train (all institutions) |
 | ror-set-point | The released retriever and set model. They learn from the StartLux judgments ([phase 1](training-1-data.md#step-4-ask-the-teacher)). No training row of these models has a held-out institution of `affiliations_unseen_institutions` as a positive ([phase 1](training-1-data.md#strings-that-training-does-not-use)). The set model trains with the mention mask ([phase 4](training-4-set-model.md#the-mention-mask)) |
-| Jev teacher | The retriever and set model `-openalex-jev-distill`. They learn from Jev's judgments. [Phase 4](training-4-set-model.md#with-the-startlux-and-jev-teachers) gives the other differences |
-
 The repository of the baseline holds the answers of v3.0.0 and of "Baseline, all" (`comparison/`).
 
 ### Test splits
@@ -190,19 +188,6 @@ The validation and test splits of `affiliations_unseen_institutions` name 1,255 
 
 The validation split holds the 272 strings that name CNRS. The recall of their links to CNRS is 64.3 for ror-set-point and 93.8 for the baseline. The candidates of ror-set-point hold 239 of these 272 links.
 
-### Teacher variant
-
-The Jev teacher pipeline (`ror-set-point-retriever-e5-base-openalex-jev-distill` and `ror-set-point-set-model-mmbert-base-openalex-jev-distill`) learns from Jev's judgments. ror-set-point learns from the StartLux judgments of the same pairs. [Phase 4](training-4-set-model.md#with-the-startlux-and-jev-teachers) compares the two pipelines on the validation splits, with 4 seeds. The table gives the test splits, with seed 1363 for both. The values are exact match / precision / recall in percent.
-
-| Split | Jev teacher | ror-set-point | Right only with the Jev teacher / only with ror-set-point | Exact McNemar p |
-|---|---|---|---:|---:|
-| `affiliations` | 90.4 / 96.1 / 92.6 | 91.5 / 96.8 / 93.2 | 37 / 58 | 0.04 |
-| `affiliations_unseen_institutions` | 84.7 / 94.6 / 87.4 | 85.0 / 95.8 / 88.0 | 71 / 77 | 0.68 |
-| `datacite` | 93.1 / 97.8 / 94.4 | 93.3 / 98.1 / 94.5 | 49 / 55 | 0.62 |
-| `openalex_sample` | 90.2 / 96.0 / 92.7 | 90.8 / 96.3 / 93.2 | 816 / 1,068 | 7 × 10⁻⁹ |
-
-On `affiliations` test, ror-set-point gives an answer for 5.8% of the strings that name no record, and the Jev teacher for 8.9%. The answers of the Jev teacher are in the repository of its set model.
-
 ### Use of the test splits
 
 No model, setting or training-data rule comes from the scores on a test split. The `affiliations_unseen_institutions` and `affiliations` test splits are a pass-or-fail check for the retriever, the set model, the mention mask and the teacher. A change must not make the scores on them significantly worse. `openalex_sample` test and `datacite` also have scores for information only, in addition to the final scores.
@@ -267,7 +252,7 @@ The model repositories contain their answers in `evaluation/predictions/<set>.js
 | `datacite_test` | `datacite` test |
 | `openalex_sample_test` | `openalex_sample` test |
 
-The two set models (ror-set-point and the Jev teacher) have all six. The baseline has the first three. The repository of the baseline also holds the answers of v3.0.0 on all six (`comparison/v3.0.0_local/<set>.jsonl`), and of "Baseline, all" on `affiliations_test`, `datacite_test` and `openalex_sample_test` (`comparison/all_institutions/<set>.jsonl`). These rows have OpenAlex institution IDs (`{id, ids}`). `score.py` changes them to ROR IDs with the records folder.
+The released set model has all six. The baseline has the first three. The repository of the baseline also holds the answers of v3.0.0 on all six (`comparison/v3.0.0_local/<set>.jsonl`), and of "Baseline, all" on `affiliations_test`, `datacite_test` and `openalex_sample_test` (`comparison/all_institutions/<set>.jsonl`). These rows have OpenAlex institution IDs (`{id, ids}`). `score.py` changes them to ROR IDs with the records folder.
 
 The answers of the released set model on the test splits come from this command:
 

@@ -8,7 +8,7 @@ This phase makes the data that the other phases read:
 
 The dataset [ror-set-point-matching-train-validation-test](https://huggingface.co/datasets/adambuttrick/ror-set-point-matching-train-validation-test) already contains the results. Its folder `data/ror_records` is a records folder: `train.jsonl` holds the records, and `withdrawn.json` and `openalex_to_ror.json` are the two maps. The configs `teacher_judgments` and `affiliations_unseen_institutions` hold the other results. Do this phase to make them again, or to use a different ROR release.
 
-The teacher is [StartLux-Decision v1.1 27B Instant](https://huggingface.co/startlux-models/StartLux-Decision-v1.1-27B-Instant), a decision model with open weights. It judges the (string, institution) pairs that Jev judged for openalex-affiliation-matcher v3.0.0. Jev is a closed commercial model from TypeSafe AI. The dataset [ror-set-point-matching-train-validation-test-openalex-jev-distill](https://huggingface.co/datasets/adambuttrick/ror-set-point-matching-train-validation-test-openalex-jev-distill) holds Jev's judgments of the same pairs, with ROR IDs.
+The teacher is [StartLux-Decision v1.1 27B Instant](https://huggingface.co/startlux-models/StartLux-Decision-v1.1-27B-Instant), a decision model with open weights. It judges the (string, institution) pairs of the training data of openalex-affiliation-matcher v3.0.0.
 
 ## Inputs
 
@@ -68,21 +68,21 @@ A withdrawn record goes to its successor when it has exactly one successor link.
 | Withdrawn records that go to an inactive record | 36 |
 | Withdrawn records with no successor | 149 |
 
-## Step 2: change Jev's judgments to ROR IDs
+## Step 2: make the teacher pairs
 
 ```
 uv run python -m ror_set_point.training.data.teacher --judgments train_v1_jev_labels.jsonl.gz --records records \
-    --out teacher_jev
+    --out teacher_pairs
 ```
 
-The input has one row for each (string, OpenAlex institution) pair. The output has one row for each string, with a list of `{ror_id, p}`. `p` is the probability, from Jev, that the string names the record.
+The input has one row for each (string, OpenAlex institution) pair, with the p of the teacher of openalex-affiliation-matcher v3.0.0. The output has one row for each string, with a list of `{ror_id, p}`. Step 4 keeps the pairs and replaces p.
 
 - An OpenAlex ID goes to the ROR ID of its institution.
 - A withdrawn ROR ID goes to its successor.
 - A judgment with no ROR ID is dropped (68 have no ROR ID, and 105 have a withdrawn record with no successor).
 - When two judgments of one string get the same ROR ID, the higher `p` stays (7 times).
 
-The output has 196,018 train strings and 3,982 validation strings, with 3,763,451 judgments. It is the `teacher_judgments` config of the `-openalex-jev-distill` dataset. Its pairs are the pairs that the teacher judges in step 4.
+The output has 196,018 train strings and 3,982 validation strings, with 3,763,451 pairs. The teacher judges these pairs in step 4.
 
 ## Step 3: divide the labeled strings by institution
 
@@ -91,7 +91,7 @@ uv run python -m ror_set_point.training.data.split --records records \
     --affiliations-train dataset/data/affiliations/train.jsonl \
     --openalex-sample-train dataset/data/openalex_sample/train.jsonl \
     --affiliations-validation dataset/data/affiliations/validation.jsonl \
-    --teacher teacher_jev/train.jsonl teacher_jev/validation.jsonl \
+    --teacher teacher_pairs/train.jsonl teacher_pairs/validation.jsonl \
     --seed 20261022 --out unseen
 ```
 
@@ -125,11 +125,11 @@ The largest group (399 strings) holds every string that names CNRS (`https://ror
 
 `ror_set_point.training.data.relabel` asks the teacher one question about each pair: does the string name the organization on the card? The answer is a probability. The steps of the module need only the standard library. The server of the teacher needs a GPU.
 
-The card of a pair has the fields that openalex-affiliation-matcher v3.0.0 gave Jev. These are the ROR display name, up to 6 other names (labels, then aliases) and up to 4 acronyms. They also include the first type, and the city and country of the first place. The question (`questions/v1.2.txt`) follows the annotation guidelines v1.2 of the dataset. For example, a parent organization counts only when the string names it. The comparisons below also use Jev's question: the question that openalex-affiliation-matcher v3.0.0 asked Jev (`NAMES_IT` in [`matcher/training/jev_teacher.py`](https://github.com/ourresearch/openalex-affiliation-matcher/blob/v3.0.0/matcher/training/jev_teacher.py)).
+The card of a pair has the fields of the cards of openalex-affiliation-matcher v3.0.0. These are the ROR display name, up to 6 other names (labels, then aliases) and up to 4 acronyms. They also include the first type, and the city and country of the first place. The question (`questions/v1.2.txt`) follows the annotation guidelines v1.2 of the dataset. For example, a parent organization counts only when the string names it.
 
 The step has four parts:
 
-1. Score the calibration pairs. These are the candidates of the labeled train strings, with their labels and folds (615,010 pairs). They come from the stage 2 rows of the `-openalex-jev-distill` set model.
+1. Score the calibration pairs. These are the candidates of the labeled train strings, with their labels and folds (615,010 pairs). They come from the stage 2 rows of the variant set model `-openalex-jev-distill` ([phase 4](training-4-set-model.md#variants)).
 2. Score the 3,763,451 pairs of step 2.
 3. Fit the calibration on the calibration pairs.
 4. Write the config: the pairs of step 2 with the calibrated p.
@@ -138,7 +138,7 @@ On Hugging Face Jobs, `jobs/relabel.sh` does parts 1 and 2, with one H200 for ea
 
 ```
 uv run python -m ror_set_point.training.data.relabel calibrate --scores stage2/*/scores.jsonl --out calibration.json
-uv run python -m ror_set_point.training.data.relabel assemble --scores teacher/*/scores.jsonl --teacher teacher_jev \
+uv run python -m ror_set_point.training.data.relabel assemble --scores teacher/*/scores.jsonl --teacher teacher_pairs \
     --calibration calibration.json --out teacher_judgments
 ```
 
@@ -147,7 +147,7 @@ To score the pairs without Jobs, start the server, then make the requests and se
 ```
 startlux-decide serve --model StartLux-Decision-v1.1-27B-Instant --launch-vllm --gpus 0 --port 8090 \
     --no-images --max-model-len 16384
-uv run python -m ror_set_point.training.data.relabel requests --teacher teacher_jev --records records \
+uv run python -m ror_set_point.training.data.relabel requests --teacher teacher_pairs --records records \
     --question src/ror_set_point/training/data/questions/v1.2.txt --out requests.jsonl.gz
 uv run python -m ror_set_point.training.data.relabel score --requests requests.jsonl.gz --out teacher/all/scores.jsonl
 ```
@@ -156,14 +156,9 @@ For the calibration pairs, give `--stage2 stage2.jsonl.gz` to `requests` in plac
 
 On 1 × NVIDIA H200, the teacher answers 24 pairs each second. Each request has about 514 tokens. The 3,763,451 pairs took 24 jobs of about 1.9 hours each.
 
-The calibration is Platt scaling on the logit of the teacher's p: p' = 1 / (1 + exp(-(a × logit(p) + b))). The fit on all 615,010 calibration pairs gives a = 2.3029 and b = -3.2924. As a check, `calibrate` also fits on folds 0 to 2 and measures the log loss on folds 3 and 4. The log loss is 0.103 for the raw p and 0.0144 for the calibrated p. With Jev's question, the calibrated log loss is 0.0180.
+The calibration is Platt scaling on the logit of the teacher's p: p' = 1 / (1 + exp(-(a × logit(p) + b))). The fit on all 615,010 calibration pairs gives a = 2.3029 and b = -3.2924. As a check, `calibrate` also fits on folds 0 to 2 and measures the log loss on folds 3 and 4. The log loss is 0.103 for the raw p and 0.0144 for the calibrated p.
 
-The pair-level quality of the raw p on the calibration pairs, without the parents of labels:
-
-| Question | AUC | Precision / recall at 0.5 | Yes for a parent that the string does not name |
-|---|---:|---:|---:|
-| v1.2 | 0.9986 | 71.3 / 98.3 | 23% |
-| Jev's question | 0.9981 | 55.0 / 98.9 | 69% |
+On the calibration pairs without the parents of labels, the raw p has an AUC of 0.9986. At 0.5, its precision is 71.3 and its recall is 98.3. For 23% of the parents that the string does not name, the raw p is 0.5 or more.
 
 `assemble` writes these files:
 
@@ -177,8 +172,8 @@ The pair-level quality of the raw p on the calibration pairs, without the parent
 |---|---:|
 | Train pairs | 3,688,556 |
 | Validation pairs | 74,895 |
-| Train pairs with p ≥ 0.5 | 188,547 (Jev: 391,457) |
-| Validation pairs with p ≥ 0.5 | 3,855 (Jev: 7,933) |
+| Train pairs with p ≥ 0.5 | 188,547 |
+| Validation pairs with p ≥ 0.5 | 3,855 |
 
 ## Strings that training does not use
 
@@ -198,7 +193,7 @@ A teacher string that gives a held-out record a p below 0.5 stays. Stage 1 of th
 With the inputs above, these outputs are equal to the datasets:
 
 - The rows of `records/records.jsonl.gz` are the rows of `ror_records`, and the two maps are equal to the maps in `data/ror_records`.
-- `teacher_jev/train.jsonl` and `teacher_jev/validation.jsonl` are equal, byte for byte, to the `teacher_judgments` config of the `-openalex-jev-distill` dataset.
+- `teacher_pairs/train.jsonl` and `teacher_pairs/validation.jsonl` are equal, byte for byte, to the `teacher_judgments` config of the variant dataset [ror-set-point-matching-train-validation-test-openalex-jev-distill](https://huggingface.co/datasets/adambuttrick/ror-set-point-matching-train-validation-test-openalex-jev-distill).
 - `unseen/train.jsonl`, `validation.jsonl`, `test.jsonl` and `held_out_records.jsonl` are equal, byte for byte, to the `affiliations_unseen_institutions` config.
 
 The teacher's p is not always the same in two runs. The server puts the requests into batches, and the GPU does not always add numbers in the same order. In a second run of 1,884 pairs, 1,870 pairs got the same p. The largest difference was 0.0057, and no pair moved across 0.5. Thus `teacher_judgments` can differ a little from the dataset. From the same score files, `calibrate` gives the a and b of the dataset to 12 decimal places. With the a and b of the dataset, `assemble` gives the config byte for byte.

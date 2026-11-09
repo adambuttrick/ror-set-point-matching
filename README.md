@@ -73,7 +73,7 @@ The name comes from two parts of the matcher. The set model reads the candidates
 
 - The lexical candidate generator. `src/ror_set_point/inference/lexical.py` adapts its code (MIT license). Here it reads the ROR records, and it has no bonus for the works count of an institution.
 - Its institutions file (`models/institutions.jsonl.gz`). It maps OpenAlex institution IDs to ROR IDs, for the teacher judgments and for answers with OpenAlex institution IDs.
-- Its teacher pairs: the 3.8 million (string, institution) pairs that Jev judged for it. Jev is a closed commercial decision model from TypeSafe AI. Here, [StartLux-Decision v1.1 27B Instant](https://huggingface.co/startlux-models/StartLux-Decision-v1.1-27B-Instant), a decision model with open weights, judges the same pairs again ([phase 1](docs/training-1-data.md#step-4-ask-the-teacher)).
+- Its teacher pairs: the 3.8 million (string, institution) pairs that its pair scorer learns from. Here, [StartLux-Decision v1.1 27B Instant](https://huggingface.co/startlux-models/StartLux-Decision-v1.1-27B-Instant), a decision model with open weights, judges these pairs ([phase 1](docs/training-1-data.md#step-4-ask-the-teacher)).
 - Its development and test samples of OpenAlex strings. The `openalex_sample` config holds them, relabeled under the same annotation guidelines as the other labeled strings of the dataset.
 
 The design of this matcher is different in these ways:
@@ -129,7 +129,6 @@ The table compares these systems:
 
 - On the 1,755 links of `affiliations_unseen_institutions` test to held-out institutions, recall is 89.8 for ror-set-point and 86.3 for the baseline. On the validation split, recall is 84.8 and 84.9. The cause is CNRS: ror-set-point misses 36% of its links, often when a string names it only with its acronym. Without the CNRS strings, recall is 88.3 and 83.5. No training row of the released models has a held-out institution as a positive.
 - On `affiliations` test, ror-set-point is right on 157 strings where the baseline is wrong. It is wrong on 52 strings where the baseline is right (exact McNemar p = 2 × 10⁻¹³). On `affiliations_unseen_institutions` test, the counts are 179 and 64 (p = 9 × 10⁻¹⁴).
-- The variant pipeline that learns from Jev's judgments gets 90.4 on `affiliations` test and 84.7 on `affiliations_unseen_institutions` test ([docs/evaluation.md](docs/evaluation.md#teacher-variant)).
 - No model, setting or training-data rule comes from the scores on a test split. The `affiliations_unseen_institutions` and `affiliations` test splits are a pass-or-fail check for the retriever, the set model, the mention mask and the teacher. A change must not make the scores on them significantly worse. `openalex_sample` test and `datacite` also have scores for information only, in addition to the final scores.
 
 [docs/evaluation.md](docs/evaluation.md) gives more results and the procedure.
@@ -223,11 +222,10 @@ Training has four phases. Each phase reads the output of the phases before it. T
 | Repository | Content |
 |---|---|
 | [ror-set-point-matching-train-validation-test](https://huggingface.co/datasets/adambuttrick/ror-set-point-matching-train-validation-test) (dataset) | Labeled strings, evaluation sets, the StartLux teacher judgments (`teacher_judgments`), synthetic strings, and the ROR records with their two maps (`data/ror_records` is a records folder) |
-| [ror-set-point-matching-train-validation-test-openalex-jev-distill](https://huggingface.co/datasets/adambuttrick/ror-set-point-matching-train-validation-test-openalex-jev-distill) (dataset) | `teacher_judgments` with Jev's judgments instead of the StartLux judgments: the same pairs, with ROR IDs |
 | [ror-set-point-retriever-e5-base](https://huggingface.co/adambuttrick/ror-set-point-retriever-e5-base) | The retriever |
 | [ror-set-point-set-model-mmbert-base-mask](https://huggingface.co/adambuttrick/ror-set-point-set-model-mmbert-base-mask) | The set model |
 | [ror-set-point-pair-scorer-baseline](https://huggingface.co/adambuttrick/ror-set-point-pair-scorer-baseline) | The baseline |
-| Variants | `ror-set-point-retriever-e5-base-openalex-jev-distill` and `ror-set-point-set-model-mmbert-base-openalex-jev-distill`: the pipeline with Jev's judgments ([docs/evaluation.md](docs/evaluation.md#teacher-variant)). The [collection](https://huggingface.co/collections/adambuttrick/ror-set-point-matching-6ada8733c9e6fb018f382d0b) also holds other variants that learn from Jev's judgments |
+| Variants | The [collection](https://huggingface.co/collections/adambuttrick/ror-set-point-matching-6ada8733c9e6fb018f382d0b) also holds variants of the retriever and the set model. They learn from the judgments of Jev, the teacher of openalex-affiliation-matcher v3.0.0. The dataset `ror-set-point-matching-train-validation-test-openalex-jev-distill` holds these judgments. [Phase 3](docs/training-3-retriever.md#variants) and [phase 4](docs/training-4-set-model.md#variants) describe the variants `-openalex-jev-distill` |
 
 Each model repository contains its training folder (`training_data/`), in the format that the training scripts read and write, and its outputs on the evaluation splits.
 
